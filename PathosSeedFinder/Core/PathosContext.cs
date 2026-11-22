@@ -31,6 +31,42 @@ namespace PathosSeedFinder.Core
     {
         private static readonly object initLock = new();
         private static PathosContext? instance;
+        private static bool resolverRegistered = false;
+        private static string currentResolveDir = "";
+
+        public static void RegisterAssemblyResolver(string gameDir)
+        {
+            currentResolveDir = gameDir;
+            if (resolverRegistered) return;
+            resolverRegistered = true;
+
+            AssemblyLoadContext.Default.Resolving += (context, assemblyName) =>
+            {
+                if (!string.IsNullOrEmpty(currentResolveDir))
+                {
+                    string candidate = Path.Combine(currentResolveDir, assemblyName.Name + ".dll");
+                    if (File.Exists(candidate))
+                    {
+                        return context.LoadFromAssemblyPath(candidate);
+                    }
+                }
+                return null;
+            };
+
+            AppDomain.CurrentDomain.AssemblyResolve += (sender, args) =>
+            {
+                if (!string.IsNullOrEmpty(currentResolveDir))
+                {
+                    var name = new AssemblyName(args.Name).Name;
+                    string candidate = Path.Combine(currentResolveDir, name + ".dll");
+                    if (File.Exists(candidate))
+                    {
+                        return Assembly.LoadFrom(candidate);
+                    }
+                }
+                return null;
+            };
+        }
 
         public static PathosContext? Instance
         {
@@ -93,7 +129,9 @@ namespace PathosSeedFinder.Core
 
                 try
                 {
-                    var ctx = new PathosContext(path);
+                    RegisterAssemblyResolver(path);
+                    var alc = new IsolatedAssemblyLoadContext(path);
+                    var ctx = new PathosContext(path, alc);
                     instance = ctx;
                     var settings = SettingsManager.Load();
                     settings.PathosDirectory = path;
@@ -103,6 +141,7 @@ namespace PathosSeedFinder.Core
                 }
                 catch (Exception ex)
                 {
+                    Console.WriteLine($"[CRITICAL MOUNT EXCEPTION] {ex}");
                     error = $"挂载游戏目录失败: {ex.Message}";
                     return false;
                 }
@@ -111,13 +150,50 @@ namespace PathosSeedFinder.Core
 
         public static PathosContext CreateIsolated(string path)
         {
+            RegisterAssemblyResolver(path);
             var alc = new IsolatedAssemblyLoadContext(path);
             return new PathosContext(path, alc);
+        }
+
+        private static Type SafeGetType(Assembly asm, string typeName)
+        {
+            try
+            {
+                var type = asm.GetType(typeName);
+                if (type != null) return type;
+            }
+            catch (ReflectionTypeLoadException rtle)
+            {
+                var msgs = string.Join("; ", rtle.LoaderExceptions.Where(e => e != null).Select(e => e!.Message));
+                throw new InvalidOperationException($"程序集 {asm.GetName().Name} 中无法加载类型 {typeName}。依赖加载错误: {msgs}", rtle);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"程序集 {asm.GetName().Name} 中查找类型 {typeName} 失败: {ex.Message}", ex);
+            }
+
+            throw new InvalidOperationException($"在程序集 {asm.GetName().Name} 中未找到类型 '{typeName}'，请检查游戏文件完整性或版本兼容性。");
+        }
+
+        private static MethodInfo SafeGetMethod(Type type, string methodName, BindingFlags flags, Type[]? parameterTypes = null)
+        {
+            MethodInfo? m = parameterTypes != null
+                ? type.GetMethod(methodName, flags, null, parameterTypes, null)
+                : type.GetMethod(methodName, flags);
+
+            if (m == null)
+            {
+                throw new InvalidOperationException($"在类型 '{type.FullName}' 中未能找到所需的方法 '{methodName}'。");
+            }
+            return m;
         }
 
         public PathosContext(string path, AssemblyLoadContext? alc = null)
         {
             InstallationPath = path;
+            RegisterAssemblyResolver(path);
+
+            alc ??= new IsolatedAssemblyLoadContext(path);
 
             // Load translation dictionary
             string dictPath = Path.Combine(InstallationPath, "Assets", "zh-Simplified.Dictionary");
@@ -126,37 +202,36 @@ namespace PathosSeedFinder.Core
                 Translations.Load(dictPath);
             }
 
-            // Load Assemblies (either isolated or default)
+            // Load Assemblies via Isolated ALC
             Assembly asmOfficial;
             Assembly asmEngine;
 
-            if (alc != null)
+            try
             {
                 asmOfficial = alc.LoadFromAssemblyPath(Path.Combine(InstallationPath, "PathosOfficial.dll"));
                 asmEngine = alc.LoadFromAssemblyPath(Path.Combine(InstallationPath, "PathosEngine.dll"));
             }
-            else
+            catch (Exception ex)
             {
-                asmOfficial = Assembly.LoadFrom(Path.Combine(InstallationPath, "PathosOfficial.dll"));
-                asmEngine = Assembly.LoadFrom(Path.Combine(InstallationPath, "PathosEngine.dll"));
+                throw new InvalidOperationException($"加载游戏程序集失败: {ex.Message}", ex);
             }
 
             var v = asmEngine.GetName().Version;
             GameVersion = v != null ? $"v{v.Major}.{v.Minor}.{v.Build}" : "未知版本";
 
-            var campaignType = asmOfficial.GetType("Pathos.OfficialCampaign")!;
-            AdventureType = asmEngine.GetType("Pathos.Adventure")!;
-            EngineType = asmEngine.GetType("Pathos.Engine")!;
-            SeedType = asmEngine.GetType("Pathos.Seed")!;
+            var campaignType = SafeGetType(asmOfficial, "Pathos.OfficialCampaign");
+            AdventureType = SafeGetType(asmEngine, "Pathos.Adventure");
+            EngineType = SafeGetType(asmEngine, "Pathos.Engine");
+            SeedType = SafeGetType(asmEngine, "Pathos.Seed");
 
-            seedFromTextMethod = SeedType.GetMethod("FromText", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)!;
-            seedFromCodeMethod = SeedType.GetMethod("FromCode", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)!;
+            seedFromTextMethod = SafeGetMethod(SeedType, "FromText", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+            seedFromCodeMethod = SafeGetMethod(SeedType, "FromCode", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
 
-            var randomSupportType = asmEngine.GetType("Pathos.RandomSupport")!;
-            reseedMethod = randomSupportType.GetMethod("Reseed", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public, null, new[] { typeof(int) }, null)!;
-            prepareShuffleMethod = AdventureType.GetMethod("PrepareShuffle", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!;
-            commitShuffleMethod = AdventureType.GetMethod("CommitShuffle", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!;
-            reverseShuffleMethod = AdventureType.GetMethod("ReverseShuffle", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!;
+            var randomSupportType = SafeGetType(asmEngine, "Pathos.RandomSupport");
+            reseedMethod = SafeGetMethod(randomSupportType, "Reseed", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public, new[] { typeof(int) });
+            prepareShuffleMethod = SafeGetMethod(AdventureType, "PrepareShuffle", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            commitShuffleMethod = SafeGetMethod(AdventureType, "CommitShuffle", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            reverseShuffleMethod = SafeGetMethod(AdventureType, "ReverseShuffle", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 
             // Load Codex
             string codexPath = Path.Combine(InstallationPath, "Assets", "Pathos.Codex");
@@ -166,8 +241,27 @@ namespace PathosSeedFinder.Core
             }
 
             using var codexStream = File.OpenRead(codexPath);
-            Campaign = Activator.CreateInstance(campaignType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new object[] { codexStream }, null)!;
-            Manifest = Campaign.Manifest;
+            Campaign = Activator.CreateInstance(campaignType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new object[] { codexStream }, null)
+                ?? throw new InvalidOperationException("无法初始化 Pathos 官方战役对象 (OfficialCampaign)！");
+
+            try
+            {
+                Manifest = Campaign.Manifest;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"读取战役清单 (Campaign.Manifest) 失败: {ex.Message}", ex);
+            }
+
+            if (Manifest == null)
+            {
+                throw new InvalidOperationException("游戏战役清单 (Campaign.Manifest) 为空！");
+            }
+
+            if (Campaign.Modules == null)
+            {
+                throw new InvalidOperationException("游戏模组列表 (Campaign.Modules) 为空！");
+            }
 
             foreach (var m in (IEnumerable)Campaign.Modules)
             {

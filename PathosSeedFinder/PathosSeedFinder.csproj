@@ -16,7 +16,7 @@
     <PathosDir Condition="'$(PathosDir)' == ''">G:\games\Pathos</PathosDir>
   </PropertyGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="Exists('$(PathosDir)\PathosEngine.dll')">
     <!-- References will be resolved dynamically by PathosContext, but static references allow direct typing if present -->
     <Reference Include="Inv.Library">
       <HintPath>$(PathosDir)\Inv.Library.dll</HintPath>
