@@ -1,0 +1,17 @@
+## .NET / C# 编译产物与临时文件
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+.vscode/
+
+## 本地配置文件与日志（保护玩家个性化路径与敏感信息）
+config.json
+fatal_crash.log
+*.log
+
+## 种子分析生成的导出文件
+Seed_Analysis_*.md

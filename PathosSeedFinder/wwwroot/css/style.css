@@ -1,0 +1,154 @@
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Nav Tabs */
+.nav-tab.active {
+  background: #1e293b;
+  color: #fbbf24;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
+}
+
+/* Sub Tabs */
+.sub-tab.active {
+  border-bottom-color: #f59e0b !important;
+  color: #fbbf24 !important;
+  background-color: #0f172a !important;
+}
+
+/* Animations */
+@keyframes pulse-fast {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.animate-pulse-fast {
+  animation: pulse-fast 0.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Table styling */
+table td {
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+/* Badges */
+.badge-possession-ground {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.badge-possession-container {
+  background-color: rgba(234, 179, 8, 0.15);
+  color: #fde047;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+
+.badge-possession-carried {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.badge-possession-covered {
+  background-color: rgba(168, 85, 247, 0.15);
+  color: #d8b4fe;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+/* Identity Category Badges */
+.badge-series-potion {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #6ee7b7;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.badge-series-scroll {
+  background-color: rgba(14, 165, 233, 0.15);
+  color: #7dd3fc;
+  border: 1px solid rgba(14, 165, 233, 0.3);
+}
+
+.badge-series-wand {
+  background-color: rgba(168, 85, 247, 0.15);
+  color: #d8b4fe;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.badge-series-ring {
+  background-color: rgba(245, 158, 11, 0.15);
+  color: #fcd34d;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.badge-series-amulet {
+  background-color: rgba(236, 72, 153, 0.15);
+  color: #f472b6;
+  border: 1px solid rgba(236, 72, 153, 0.3);
+}
+
+.badge-series-book {
+  background-color: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.badge-series-gear {
+  background-color: rgba(148, 163, 184, 0.15);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+/* Map Layer Chips */
+.map-layer-chip.active {
+  background-color: rgba(245, 158, 11, 0.2) !important;
+  color: #fbbf24 !important;
+  border-color: rgba(245, 158, 11, 0.5) !important;
+}
+
+.map-layer-chip:not(.active) {
+  background-color: rgba(30, 41, 59, 0.6) !important;
+  color: #64748b !important;
+  border-color: rgba(51, 65, 85, 0.8) !important;
+  opacity: 0.7;
+}
+
+#map-canvas-container {
+  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.03) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+/* Tileset Option Selection */
+.tileset-option {
+  transition: all 0.2s ease;
+}
+
+.tileset-option:hover {
+  border-color: #f59e0b;
+  transform: translateY(-1px);
+}
+
+.tileset-option:has(input:checked),
+.tileset-option.selected {
+  border-color: #f59e0b !important;
+  background-color: rgba(245, 158, 11, 0.15) !important;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.25);
+}
+
+.tileset-option:has(input:checked) span.font-bold,
+.tileset-option.selected span.font-bold {
+  color: #fbbf24 !important;
+}

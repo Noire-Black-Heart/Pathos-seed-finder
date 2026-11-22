@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- NOTE: Must remain 'PathosSyntaxTest' to satisfy [InternalsVisibleTo("PathosSyntaxTest")] inside PathosEngine.dll -->
+    <AssemblyName>PathosSyntaxTest</AssemblyName>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>PathosSeedFinder</RootNamespace>
+    <NoWarn>$(NoWarn);MSB3277;CS8600;CS8602;CS8604</NoWarn>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <!-- Configurable game installation path (override via -p:PathosDir="...") -->
+    <PathosDir Condition="'$(PathosDir)' == ''">G:\games\Pathos</PathosDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- References will be resolved dynamically by PathosContext, but static references allow direct typing if present -->
+    <Reference Include="Inv.Library">
+      <HintPath>$(PathosDir)\Inv.Library.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="PathosLibrary">
+      <HintPath>$(PathosDir)\PathosLibrary.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="PathosEngine">
+      <HintPath>$(PathosDir)\PathosEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Pathos">
+      <HintPath>$(PathosDir)\Pathos.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="PathosOfficial">
+      <HintPath>$(PathosDir)\PathosOfficial.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ICSharpCode.Decompiler" Version="11.2.0.10050" />
+  </ItemGroup>
+
+  <Target Name="FixRuntimeConfig" AfterTargets="GenerateBuildRuntimeConfigurationFiles">
+    <Copy SourceFiles="$(PathosDir)\PathosGame.runtimeconfig.json" DestinationFiles="$(ProjectRuntimeConfigFilePath)" Condition="Exists('$(PathosDir)\PathosGame.runtimeconfig.json')" />
+    <Exec Command="powershell -Command &quot;$c = Get-Content '$(ProjectRuntimeConfigFilePath)' | ConvertFrom-Json; $c.runtimeOptions.configProperties | Add-Member -NotePropertyName 'System.GC.Server' -NotePropertyValue $true -Force; $c.runtimeOptions.configProperties | Add-Member -NotePropertyName 'System.GC.Concurrent' -NotePropertyValue $true -Force; $c.runtimeOptions.configProperties | Add-Member -NotePropertyName 'System.Threading.ThreadPool.MinThreads' -NotePropertyValue 16 -Force; $c | ConvertTo-Json -Depth 10 | Set-Content '$(ProjectRuntimeConfigFilePath)'&quot;" />
+  </Target>
+
+</Project>

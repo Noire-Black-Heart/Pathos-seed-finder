@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🌟 Pathos: Nethack Codex 随机种子分析与筛选器</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#fffbeb',
+              100: '#fef3c7',
+              200: '#fde68a',
+              300: '#fcd34d',
+              400: '#fbbf24',
+              500: '#f59e0b',
+              600: '#d97706',
+              700: '#b45309',
+              800: '#92400e',
+              900: '#78350f',
+            },
+            surface: {
+              50: '#f8fafc',
+              100: '#f1f5f9',
+              200: '#e2e8f0',
+              300: '#cbd5e1',
+              700: '#334155',
+              800: '#1e293b',
+              850: '#162032',
+              900: '#0f172a',
+              950: '#080d1a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="bg-surface-950 text-slate-100 min-h-screen flex flex-col font-sans selection:bg-brand-500 selection:text-surface-950">
+
+  <!-- Top Navigation Header -->
+  <header class="sticky top-0 z-40 bg-surface-900/90 backdrop-blur-md border-b border-surface-700/60 shadow-lg">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      
+      <!-- Logo & Title -->
+      <div class="flex items-center space-x-3">
+        <span class="text-2xl filter drop-shadow">💎</span>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="font-bold text-lg tracking-tight bg-gradient-to-r from-amber-400 via-amber-200 to-amber-500 bg-clip-text text-transparent">
+              Pathos Seed Finder
+            </h1>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-400 border border-brand-500/30 font-medium">
+              WebGUI v1.0
+            </span>
+          </div>
+          <p class="text-xs text-slate-400 hidden sm:block" data-i18n="app.subtitle">基于 Pathos: Nethack Codex 原生引擎反射模拟</p>
+        </div>
+      </div>
+
+      <!-- Mode Switcher Tabs -->
+      <div class="flex items-center bg-surface-950 p-1 rounded-xl border border-surface-700/80 shadow-inner">
+        <button id="tab-analyze-btn" class="nav-tab active flex items-center space-x-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-200">
+          <span>🔍</span>
+          <span data-i18n="nav.analyze">透视模式 (Analyze)</span>
+        </button>
+        <button id="tab-find-btn" class="nav-tab flex items-center space-x-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 text-slate-400 hover:text-slate-200">
+          <span>🎯</span>
+          <span data-i18n="nav.find">筛选模式 (Find / Roll)</span>
+        </button>
+      </div>
+
+      <!-- Status Indicator & Quick Tools -->
+      <div class="flex items-center space-x-3">
+        <button id="btn-open-settings" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-surface-800 hover:bg-surface-700 text-xs text-slate-300 hover:text-white border border-surface-700 transition" title="配置或更换 Pathos 游戏目录" data-i18n-title="nav.gamedir">
+          <span id="settings-dot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          <span id="settings-label" data-i18n="nav.gamedir">🎮 游戏目录</span>
+          <span class="text-slate-500">⚙️</span>
+        </button>
+        <button id="header-lang-btn" class="px-2.5 py-1.5 rounded-lg bg-surface-800 hover:bg-surface-700 text-slate-300 hover:text-white text-xs font-bold transition flex items-center gap-1 border border-surface-700 active:scale-95" title="切换语言 / Switch Language" data-i18n-title="nav.langToggle">
+          🌐 <b>中</b>
+        </button>
+        <button id="theme-toggle-btn" class="p-2 rounded-lg bg-surface-800 hover:bg-surface-700 text-slate-300 hover:text-white transition" title="切换暗黑/明亮主题" data-i18n-title="nav.themeToggle">
+          🌙
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- ======================================================== -->
+    <!-- VIEW 1: ANALYZE MODE (透视模式)                           -->
+    <!-- ======================================================== -->
+    <div id="view-analyze" class="space-y-6">
+
+      <!-- Seed Input & Quick Actions -->
+      <section class="bg-surface-900 border border-surface-800 rounded-2xl p-5 shadow-xl">
+        <div class="flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between">
+          
+          <!-- Seed Search Box -->
+          <div class="flex-1 flex items-center bg-surface-950 border border-surface-700/80 rounded-xl px-3.5 py-2 focus-within:border-brand-500 transition shadow-inner">
+            <span class="text-slate-400 text-sm mr-2 select-none" data-i18n="analyze.seedLabel">种子:</span>
+            <input 
+              id="analyze-seed-input" 
+              type="text" 
+              value="test1234" 
+              placeholder="输入种子，如 #12345678 或 任意文字 (test1234)" 
+              data-i18n-placeholder="analyze.seedPlaceholder"
+              class="w-full bg-transparent text-slate-100 placeholder-slate-500 font-mono text-base focus:outline-none"
+            >
+            <button id="btn-clear-seed" class="text-slate-500 hover:text-slate-300 px-2 text-sm" title="清空" data-i18n-title="analyze.clear">✕</button>
+          </div>
+
+          <!-- Buttons Row -->
+          <div class="flex flex-wrap items-center gap-2.5">
+            <button id="btn-analyze-run" class="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-surface-950 font-bold shadow-lg shadow-amber-500/20 active:scale-95 transition">
+              <span>🔍</span>
+              <span data-i18n="analyze.btnRun">深度分析</span>
+            </button>
+            <button id="btn-analyze-random" class="flex items-center space-x-1.5 px-3.5 py-2.5 rounded-xl bg-surface-800 hover:bg-surface-700 text-slate-200 text-sm font-medium border border-surface-700 active:scale-95 transition" title="随机生成一个新种子">
+              <span>🎲</span>
+              <span data-i18n="analyze.btnRandom">随机</span>
+            </button>
+            <button id="btn-copy-seed" class="flex items-center space-x-1.5 px-3.5 py-2.5 rounded-xl bg-surface-800 hover:bg-surface-700 text-slate-200 text-sm font-medium border border-surface-700 active:scale-95 transition" title="复制种子代码">
+              <span id="copy-icon">📋</span>
+              <span id="copy-text" data-i18n="analyze.btnCopy">复制</span>
+            </button>
+            <button id="btn-export-markdown" class="flex items-center space-x-1.5 px-3.5 py-2.5 rounded-xl bg-surface-800 hover:bg-surface-700 text-slate-200 text-sm font-medium border border-surface-700 active:scale-95 transition" title="导出 Markdown 完整报告">
+              <span>📄</span>
+              <span data-i18n="analyze.btnExport">导出报告</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Quick Info Ribbon -->
+        <div id="analyze-info-ribbon" class="mt-4 pt-3 border-t border-surface-800/80 flex flex-wrap items-center gap-4 text-xs text-slate-400">
+          <div class="flex items-center space-x-1">
+            <span class="text-slate-500" data-i18n="analyze.curSeed">当前种子:</span>
+            <span id="info-seed-text" class="font-mono text-amber-400 font-semibold text-sm">test1234</span>
+            <span id="info-seed-code" class="text-slate-500">(1140162665)</span>
+          </div>
+          <div class="flex items-center space-x-1">
+            <span class="text-slate-500" data-i18n="analyze.elapsed">解析耗时:</span>
+            <span id="info-elapsed-time" class="text-emerald-400 font-mono font-medium">-- ms</span>
+          </div>
+          <div class="flex items-center space-x-1">
+            <span class="text-slate-500" data-i18n="analyze.artCount">生成神器数:</span>
+            <span id="info-artifact-count" class="text-amber-300 font-mono font-medium">--</span>
+          </div>
+          <div class="flex items-center space-x-1">
+            <span class="text-slate-500" data-i18n="analyze.shopCount">设施商店数:</span>
+            <span id="info-shop-count" class="text-blue-300 font-mono font-medium">--</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Macro Ecosystem 3-Card Hero Grid -->
+      <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        
+        <!-- Minetown Card -->
+        <div class="bg-surface-900 border border-surface-800 rounded-2xl p-4 shadow-md flex flex-col justify-between hover:border-surface-700 transition">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5" data-i18n="analyze.minetownTitle">
+                <span>🏰</span> 矿镇生态 (Minetown)
+              </span>
+              <span id="mt-badge" class="px-2 py-0.5 rounded text-xs font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">
+                加载中
+              </span>
+            </div>
+            <div id="mt-desc" class="text-xs text-slate-300 mb-3 min-h-[44px] leading-relaxed" data-i18n="analyze.minetownLoading">
+              分析中...
+            </div>
+          </div>
+          <div class="pt-2 border-t border-surface-800 text-xs flex justify-between text-slate-400">
+            <span><span data-i18n="analyze.minetownGuards">警卫:</span> <b id="mt-guards" class="text-slate-200">0</b></span>
+            <span><span data-i18n="analyze.minetownOrcs">兽人:</span> <b id="mt-orcs" class="text-red-400">0</b></span>
+            <span><span data-i18n="analyze.minetownMerchants">设施:</span> <b id="mt-merchants" class="text-amber-300">0</b></span>
+          </div>
+        </div>
+
+        <!-- Elf Kingdom Card -->
+        <div class="bg-surface-900 border border-surface-800 rounded-2xl p-4 shadow-md flex flex-col justify-between hover:border-surface-700 transition">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5" data-i18n="analyze.elfTitle">
+                <span>🧝</span> 精灵王国 (Elf Kingdom)
+              </span>
+              <span id="elf-badge" class="px-2 py-0.5 rounded text-xs font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">
+                加载中
+              </span>
+            </div>
+            <div id="elf-desc" class="text-xs text-slate-300 mb-3 min-h-[44px] leading-relaxed" data-i18n="analyze.elfLoading">
+              分析中...
+            </div>
+          </div>
+          <div class="pt-2 border-t border-surface-800 text-xs flex justify-between text-slate-400">
+            <span><span data-i18n="analyze.elfTown">城内精灵:</span> <b id="elf-town" class="text-slate-200">0</b></span>
+            <span><span data-i18n="analyze.elfPalace">王宫守备:</span> <b id="elf-palace" class="text-slate-200">0</b></span>
+            <span><span data-i18n="analyze.elfEntrance">入口:</span> <b id="elf-level" class="text-amber-400">地牢 --层</b></span>
+          </div>
+        </div>
+
+        <!-- Sokoban Big 3 Card -->
+        <div class="bg-surface-900 border border-surface-800 rounded-2xl p-4 shadow-md flex flex-col justify-between hover:border-surface-700 transition">
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5" data-i18n="analyze.sokobanTitle">
+                <span>📦</span> 仓库番大奖 (Sokoban)
+              </span>
+              <span id="soko-entrance" class="text-xs font-mono px-1.5 py-0.5 rounded bg-surface-800 text-amber-300">
+                入口: --层
+              </span>
+            </div>
+            <div id="soko-rewards" class="space-y-1 text-xs text-slate-300">
+              <div class="flex items-center gap-1 text-slate-400" data-i18n="analyze.sokobanAnalyzing">正在分析仓库番大奖...</div>
+            </div>
+          </div>
+          <div class="pt-2 border-t border-surface-800 text-xs text-slate-500 truncate" id="soko-floors-hint" data-i18n="analyze.sokobanFloorsHint">
+            1~3层沿途魔法道具已分析
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Details Sub-Navigation Tabs -->
+      <section class="bg-surface-900 border border-surface-800 rounded-2xl overflow-hidden shadow-xl">
+        <div class="flex border-b border-surface-800 bg-surface-950/50 px-4 pt-3 gap-2 overflow-x-auto">
+          <button id="subtab-artifacts-btn" class="sub-tab active px-4 py-2 rounded-t-xl text-sm font-semibold border-b-2 border-brand-500 text-brand-400 bg-surface-900 transition whitespace-nowrap">
+            <span data-i18n="subtab.artifacts">🗡️ 全神器精准定位</span> (<span id="tab-art-count">0</span>)
+          </button>
+          <button id="subtab-identities-btn" class="sub-tab px-4 py-2 rounded-t-xl text-sm font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition whitespace-nowrap">
+            <span data-i18n="subtab.identities">🧪 全药水卷轴鉴定</span> (<span id="tab-id-count">0</span>)
+          </button>
+          <button id="subtab-map-btn" class="sub-tab px-4 py-2 rounded-t-xl text-sm font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition whitespace-nowrap">
+            <span data-i18n="subtab.map">🗺️ 全层地图透视</span>
+          </button>
+          <button id="subtab-shops-btn" class="sub-tab px-4 py-2 rounded-t-xl text-sm font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition whitespace-nowrap">
+            <span data-i18n="subtab.shops">🏪 商店与商人生态</span> (<span id="tab-shop-count">0</span>)
+          </button>
+          <button id="subtab-sokoban-btn" class="sub-tab px-4 py-2 rounded-t-xl text-sm font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition whitespace-nowrap">
+            <span data-i18n="subtab.sokoban">📦 仓库番沿途道具明细</span>
+          </button>
+        </div>
+
+        <div class="p-5">
+          <!-- Artifacts Tab Content -->
+          <div id="subtab-artifacts-content" class="space-y-4">
+            
+            <!-- Filters for Artifacts -->
+            <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+              <div class="flex-1 max-w-md relative">
+                <input 
+                  id="artifact-filter-input" 
+                  type="text" 
+                  placeholder="搜索神器中文/英文名、区域、持有者..." 
+                  data-i18n-placeholder="art.filterPlaceholder"
+                  class="w-full bg-surface-950 border border-surface-700/80 rounded-xl px-3.5 py-1.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500 transition"
+                >
+              </div>
+
+              <!-- Quick Site Filter Chips -->
+              <div id="artifact-site-chips" class="flex flex-wrap items-center gap-1.5 text-xs">
+                <button class="site-chip active px-2.5 py-1 rounded-lg bg-brand-500 text-surface-950 font-bold" data-site="all" data-i18n="art.siteAll">全部</button>
+                <button class="site-chip px-2.5 py-1 rounded-lg bg-surface-800 text-slate-300 hover:bg-surface-700 font-medium" data-site="Dungeon" data-i18n="art.siteDungeon">主地牢</button>
+                <button class="site-chip px-2.5 py-1 rounded-lg bg-surface-800 text-slate-300 hover:bg-surface-700 font-medium" data-site="Mines" data-i18n="art.siteMines">矿洞</button>
+                <button class="site-chip px-2.5 py-1 rounded-lg bg-surface-800 text-slate-300 hover:bg-surface-700 font-medium" data-site="Underdeep" data-i18n="art.siteUnderdeep">地城</button>
+                <button class="site-chip px-2.5 py-1 rounded-lg bg-surface-800 text-slate-300 hover:bg-surface-700 font-medium" data-site="Elf Kingdom" data-i18n="art.siteElf">精灵王国</button>
+                <button class="site-chip px-2.5 py-1 rounded-lg bg-surface-800 text-slate-300 hover:bg-surface-700 font-medium" data-site="Abyss" data-i18n="art.siteAbyss">深渊</button>
+              </div>
+            </div>
+
+            <!-- Artifacts Table / Cards Container -->
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-sm border-collapse">
+                <thead>
+                  <tr class="border-b border-surface-800 text-xs text-slate-400 bg-surface-950/40 uppercase">
+                    <th class="py-3 px-3" data-i18n="art.thName">神器名称 (Name)</th>
+                    <th class="py-3 px-3" data-i18n="art.thLocation">所在区域与楼层 (Location)</th>
+                    <th class="py-3 px-3" data-i18n="art.thDungeonLevel">主地牢折算层</th>
+                    <th class="py-3 px-3" data-i18n="art.thPossession">存放形态 (Possession)</th>
+                    <th class="py-3 px-3" data-i18n="art.thHolder">藏匿者 / 容器详情</th>
+                    <th class="py-3 px-3 text-right" data-i18n="art.thCoords">坐标 (X, Y)</th>
+                  </tr>
+                </thead>
+                <tbody id="artifacts-table-body" class="divide-y divide-surface-800/60 font-mono text-xs">
+                  <tr>
+                    <td colspan="6" class="py-8 text-center text-slate-500" data-i18n="art.analyzing">正在分析神器列表...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+
+          <!-- All Potion & Scroll Identification Tab Content -->
+          <div id="subtab-identities-content" class="hidden space-y-4">
+            
+            <!-- Quick Filter Bar -->
+            <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+              <div class="flex-1 max-w-md relative">
+                <input 
+                  id="identity-filter-input" 
+                  type="text" 
+                  placeholder="搜索真实名称、未鉴定外观 (如 灿蓝、治疗、PRATYAVAYAH)..." 
+                  data-i18n-placeholder="id.filterPlaceholder"
+                  class="w-full bg-surface-950 border border-surface-700/80 rounded-xl px-3.5 py-1.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500 transition"
+                >
+              </div>
+
+              <!-- Series Category Chips -->
+              <div id="identity-series-chips" class="flex flex-wrap items-center gap-1.5 text-xs">
+                <button class="id-series-chip active px-2.5 py-1 rounded-lg bg-brand-500 text-surface-950 font-bold" data-series="all" data-i18n="id.seriesAll">全部</button>
+                <button class="id-series-chip px-2.5 py-1 rounded-lg bg-surface-800 text-slate-300 hover:bg-surface-700 font-medium" data-series="potion" data-i18n="id.seriesPotion">🧪 药水</button>
+                <button class="id-series-chip px-2.5 py-1 rounded-lg bg-surface-800 text-slate-300 hover:bg-surface-700 font-medium" data-series="scroll" data-i18n="id.seriesScroll">📜 卷轴</button>
+                <button class="id-series-chip px-2.5 py-1 rounded-lg bg-surface-800 text-slate-300 hover:bg-surface-700 font-medium" data-series="wand" data-i18n="id.seriesWand">🪄 魔杖</button>
+                <button class="id-series-chip px-2.5 py-1 rounded-lg bg-surface-800 text-slate-300 hover:bg-surface-700 font-medium" data-series="ring" data-i18n="id.seriesRing">💍 戒指</button>
+                <button class="id-series-chip px-2.5 py-1 rounded-lg bg-surface-800 text-slate-300 hover:bg-surface-700 font-medium" data-series="amulet" data-i18n="id.seriesAmulet">📿 护符</button>
+                <button class="id-series-chip px-2.5 py-1 rounded-lg bg-surface-800 text-slate-300 hover:bg-surface-700 font-medium" data-series="book" data-i18n="id.seriesBook">📖 技能书</button>
+                <button class="id-series-chip px-2.5 py-1 rounded-lg bg-surface-800 text-slate-300 hover:bg-surface-700 font-medium" data-series="gear" data-i18n="id.seriesGear">🛡️ 装备/其它</button>
+              </div>
+            </div>
+
+            <!-- Hint ribbon -->
+            <div class="flex items-center justify-between text-xs text-slate-400 bg-surface-950/40 px-3 py-2 rounded-xl border border-surface-800/60">
+              <span class="flex items-center gap-1.5" data-i18n="id.hint">
+                <span>💡</span> 游戏中所有未鉴定的药水、卷轴、魔杖等道具外观均为开局随机生成，本表已为您完全破译当前种子的映射关系！
+              </span>
+              <span id="identities-count-hint" class="font-mono text-amber-400 font-semibold">共 0 项</span>
+            </div>
+
+            <!-- Identified Items Table -->
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-sm border-collapse">
+                <thead>
+                  <tr class="border-b border-surface-800 text-xs text-slate-400 bg-surface-950/40 uppercase">
+                    <th class="py-3 px-3 w-28" data-i18n="id.thCategory">类别 (Type)</th>
+                    <th class="py-3 px-3" data-i18n="id.thApparent">未鉴定外观 (Game Appearance)</th>
+                    <th class="py-3 px-3 text-center w-12" data-i18n="id.thArrow">对应</th>
+                    <th class="py-3 px-3" data-i18n="id.thReal">真实身份 (True Identity)</th>
+                    <th class="py-3 px-3 text-right" data-i18n="id.thCode">英文代码 (Codex Name)</th>
+                  </tr>
+                </thead>
+                <tbody id="identities-table-body" class="divide-y divide-surface-800/60 font-mono text-xs">
+                  <tr>
+                    <td colspan="5" class="py-8 text-center text-slate-500" data-i18n="id.analyzing">正在分析全药水卷轴鉴定表...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+          </div>
+
+          <!-- Full Floor Map Viewer Tab Content -->
+          <div id="subtab-map-content" class="hidden space-y-4">
+            
+            <!-- Map Viewer Toolbar -->
+            <div class="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between bg-surface-950 p-3.5 rounded-xl border border-surface-800">
+              
+              <!-- Left: Floor Dropdown Selector -->
+              <div class="flex flex-wrap items-center gap-3">
+                <div class="flex items-center space-x-2">
+                  <span class="text-xs font-semibold text-slate-400 select-none" data-i18n="map.selectFloor">选择楼层:</span>
+                  <select id="map-floor-select" class="bg-surface-900 border border-surface-700 rounded-lg px-3 py-1.5 text-sm text-slate-100 font-semibold focus:outline-none focus:border-brand-500 transition">
+                    <option value="" data-i18n="map.loadingFloors">正在加载楼层列表...</option>
+                  </select>
+                </div>
+
+                <span id="map-size-badge" class="text-xs font-mono px-2 py-1 rounded bg-surface-800 text-amber-400 border border-surface-700">
+                  -- × -- 网格
+                </span>
+
+                <span id="map-coords-badge" class="text-xs font-mono px-2 py-1 rounded bg-surface-800 text-slate-400 border border-surface-700">
+                  <span data-i18n="map.cursor">指针:</span> (-, -)
+                </span>
+              </div>
+
+              <!-- Center/Right: Layer Toggles & View Controls -->
+              <div class="flex flex-wrap items-center gap-2 text-xs">
+                
+                <!-- Quick Tileset Selector -->
+                <div class="flex items-center space-x-1.5 bg-surface-900 border border-surface-700/80 rounded-lg px-2.5 py-1">
+                  <span class="text-[11px] font-semibold text-slate-400 select-none" data-i18n="map.tileset">贴图包:</span>
+                  <select id="map-tileset-select" class="bg-transparent text-brand-400 font-bold text-xs focus:outline-none cursor-pointer">
+                    <option value="sonyvanda" class="bg-surface-900 text-slate-200">Sonyvanda (原版默认)</option>
+                    <option value="classic" class="bg-surface-900 text-slate-200">Classic (像素复古)</option>
+                    <option value="geoduck" class="bg-surface-900 text-slate-200">Geoduck (矢量极简)</option>
+                    <option value="absurd" class="bg-surface-900 text-slate-200">Absurd (高精怪诞)</option>
+                  </select>
+                </div>
+
+                <!-- Layer Toggle Chips -->
+                <button id="map-toggle-textures" class="map-layer-chip active px-2.5 py-1 rounded-lg bg-brand-500/20 text-brand-400 border border-brand-500/40 font-medium transition" title="开启/关闭官方原版材质贴图">
+                  <span data-i18n="map.layerTextures">🎨 原版贴图</span>
+                </button>
+                <button id="map-toggle-items" class="map-layer-chip active px-2.5 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-medium transition" title="透视显示地面道具与怪物携带物品（蓝框:被压住，红框:怪物身上）">
+                  <span data-i18n="map.layerItems">📦 道具分布</span> (<span id="map-items-count">0</span>)
+                </button>
+                <button id="map-toggle-shops" class="map-layer-chip active px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 font-medium transition" title="显示地牢中的商店、商人与特殊工坊图标">
+                  <span data-i18n="map.layerShops">🏪 商店/商人</span> (<span id="map-shops-count">0</span>)
+                </button>
+                <button id="map-toggle-boulders" class="map-layer-chip active px-2.5 py-1 rounded-lg bg-stone-500/20 text-stone-300 border border-stone-500/40 font-medium transition" title="高亮显示推石解谜的巨石">
+                  <span data-i18n="map.layerBoulders">🪨 巨石</span> (<span id="map-boulders-count">0</span>)
+                </button>
+                <button id="map-toggle-traps" class="map-layer-chip active px-2.5 py-1 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/40 font-medium transition" title="透视显示陷坑、孔洞与各类隐蔽陷阱">
+                  <span data-i18n="map.layerTraps">⚠️ 陷阱</span> (<span id="map-traps-count">0</span>)
+                </button>
+                <button id="map-toggle-stairs" class="map-layer-chip active px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-medium transition" title="高亮显示上下楼梯与传送门">
+                  <span data-i18n="map.layerStairs">🚪 楼梯高亮</span>
+                </button>
+                <button id="map-toggle-fixtures" class="map-layer-chip active px-2.5 py-1 rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 font-medium transition" title="显示/隐藏祭坛、喷泉、工作台与王座等设施贴图">
+                  <span data-i18n="map.layerFixtures">✨ 设施贴图</span> (<span id="map-fixtures-count">0</span>)
+                </button>
+                <button id="map-toggle-secrets" class="map-layer-chip active px-2.5 py-1 rounded-lg bg-purple-500/20 text-purple-400 border border-purple-500/40 font-medium transition" title="高亮显形伪装成石墙的隐秘暗门">
+                  <span data-i18n="map.layerSecrets">👁️ 隐藏暗门</span>
+                </button>
+
+                <div class="h-4 w-px bg-surface-800 mx-1 hidden sm:block"></div>
+
+                <!-- Zoom Controls -->
+                <button id="btn-zoom-in" class="p-1.5 px-2.5 rounded-lg bg-surface-800 hover:bg-surface-700 text-slate-200 font-bold border border-surface-700 active:scale-95 transition" title="放大" data-i18n-title="map.btnZoomIn">
+                  ➕
+                </button>
+                <button id="btn-zoom-out" class="p-1.5 px-2.5 rounded-lg bg-surface-800 hover:bg-surface-700 text-slate-200 font-bold border border-surface-700 active:scale-95 transition" title="缩小" data-i18n-title="map.btnZoomOut">
+                  ➖
+                </button>
+                <button id="btn-zoom-reset" class="px-2.5 py-1.5 rounded-lg bg-surface-800 hover:bg-surface-700 text-slate-200 text-xs font-medium border border-surface-700 active:scale-95 transition" title="复位缩放与居中" data-i18n-title="map.btnCenter">
+                  <span data-i18n="map.btnCenter">🎯 居中</span>
+                </button>
+              </div>
+
+            </div>
+
+            <!-- Canvas Container -->
+            <div id="map-canvas-container" class="relative w-full h-[620px] bg-[#0c111c] border border-surface-800 rounded-2xl overflow-hidden shadow-2xl select-none">
+              
+              <!-- HTML5 Canvas -->
+              <canvas id="map-canvas" class="w-full h-full cursor-grab active:cursor-grabbing block"></canvas>
+
+              <!-- Loading Overlay -->
+              <div id="map-loading-overlay" class="hidden absolute inset-0 bg-surface-950/70 backdrop-blur-xs flex items-center justify-center z-10">
+                <div class="flex items-center space-x-3 px-4 py-2 rounded-xl bg-surface-900 border border-surface-700 text-sm text-slate-200 shadow-xl">
+                  <span class="animate-spin text-brand-400">🌀</span>
+                  <span data-i18n="map.rendering">正在渲染楼层全息地图...</span>
+                </div>
+              </div>
+
+              <!-- Floating Tooltip -->
+              <div id="map-tooltip" class="hidden pointer-events-none absolute z-20 px-3 py-1.5 rounded-xl bg-surface-950/90 text-slate-100 text-xs border border-surface-700 shadow-2xl backdrop-blur-md whitespace-nowrap transition-opacity">
+                <!-- Injected via JS -->
+              </div>
+
+              <!-- Bottom Bar Helper Note -->
+              <div class="absolute bottom-3 left-3 right-3 flex items-center justify-between text-[11px] text-slate-400 bg-surface-950/80 px-3 py-1.5 rounded-lg border border-surface-800/80 backdrop-blur-xs pointer-events-none">
+                <span data-i18n="map.helperNote">🖱️ <b>鼠标滚轮</b>：缩放画布 | <b>按住左键拖拽</b>：平移地图 | <b>鼠标悬停</b>：探查地块信息</span>
+                <span id="map-zoom-label" class="font-mono text-amber-400 font-bold">100%</span>
+              </div>
+
+            </div>
+
+          </div>
+
+          <!-- Shops Tab Content -->
+          <div id="subtab-shops-content" class="hidden space-y-4">
+            <div class="bg-amber-950/20 border border-amber-900/40 rounded-xl p-3 text-xs text-amber-300 flex items-center justify-between">
+              <span data-i18n="shops.tip">⭐ 前期关键商业区（主地牢 1~10 层、矿镇 1 层）的物资对于前期平稳破局至关重要！</span>
+              <span id="shops-count-badge" class="font-bold">共 0 处设施</span>
+            </div>
+            <div id="shops-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div class="text-slate-500 text-center col-span-3 py-6" data-i18n="shops.loading">正在加载商店数据...</div>
+            </div>
+          </div>
+
+          <!-- Sokoban Tab Content -->
+          <div id="subtab-sokoban-content" class="hidden space-y-4">
+            <div id="sokoban-details-view" class="space-y-4">
+              <div class="text-slate-500 text-center py-6" data-i18n="soko.loading">正在加载仓库番详情...</div>
+            </div>
+          </div>
+
+
+
+        </div>
+      </section>
+
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- VIEW 2: FIND / ROLL MODE (筛选模式 2.0 动态多条件版)      -->
+    <!-- ======================================================== -->
+    <div id="view-find" class="hidden space-y-6">
+
+      <!-- Main Layout: Left Criteria (5 Cols), Right Progress & Results (7 Cols) -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        <!-- Left: Search Filter Configuration Panel (5 Cols) -->
+        <div class="lg:col-span-5 bg-surface-900 border border-surface-800 rounded-2xl p-5 shadow-xl space-y-5">
+          
+          <!-- Header & Logic Mode -->
+          <div class="flex items-center justify-between border-b border-surface-800 pb-3">
+            <div>
+              <h2 class="font-bold text-base flex items-center gap-2">
+                <span>🎯</span> <span data-i18n="find.title">复合过滤条件配置</span>
+              </h2>
+              <p class="text-[11px] text-slate-400 mt-0.5" data-i18n="find.subtitle">支持自由添加神器、层数、矿镇、精灵等多个联动条件</p>
+            </div>
+            <button id="btn-reset-filters" class="text-xs text-slate-400 hover:text-brand-400 transition" title="清空全部条件" data-i18n="find.clear">
+              清空
+            </button>
+          </div>
+
+          <!-- Quick Presets -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider" data-i18n="find.presetsTitle">⚡ 预设</label>
+            </div>
+            <div id="presets-container" class="flex flex-wrap gap-1.5 text-xs">
+              <!-- Populated by JS (Built-in + Custom Presets) -->
+            </div>
+          </div>
+
+          <!-- Dynamic Condition Rules Container -->
+          <div class="space-y-3">
+            <div class="flex items-center justify-between text-xs text-slate-400 font-semibold px-0.5">
+              <span><span data-i18n="find.activeRulesTitle">已激活的过滤条件</span> (<span id="rules-count-badge" class="text-amber-400">0</span>)</span>
+              <span id="rules-hint-label" class="text-[11px] text-slate-500" data-i18n="find.activeRulesHint">点击下方按钮可继续添加</span>
+            </div>
+
+            <!-- Rules List -->
+            <div id="rules-container" class="space-y-2.5">
+              <!-- Dynamically populated by JS -->
+            </div>
+
+            <!-- Action Buttons: Add Condition & Save Current as Preset -->
+            <div class="grid grid-cols-3 gap-2">
+              <button 
+                id="btn-add-rule" 
+                type="button" 
+                class="col-span-2 py-2.5 rounded-xl border-2 border-dashed border-surface-700 hover:border-brand-500/80 bg-surface-950/40 hover:bg-brand-500/10 text-slate-300 hover:text-brand-400 text-xs font-bold transition flex items-center justify-center gap-1.5 active:scale-98"
+              >
+                <span class="text-base leading-none">➕</span>
+                <span data-i18n="find.btnAddRule">添加新条件</span>
+              </button>
+              <button 
+                id="btn-save-preset" 
+                type="button" 
+                class="col-span-1 py-2.5 rounded-xl border border-surface-700 hover:border-amber-500/80 bg-surface-900 hover:bg-amber-500/10 text-slate-300 hover:text-amber-400 text-xs font-semibold transition flex items-center justify-center gap-1.5 active:scale-98 shadow-xs" 
+                title="将当前已激活的过滤条件保存为本地预设"
+              >
+                <span class="text-sm">💾</span>
+                <span data-i18n="find.btnSavePreset">保存预设</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Search Scale & Range -->
+          <div class="bg-surface-950/60 p-3.5 rounded-xl border border-surface-800 space-y-3 text-xs">
+            <div class="font-semibold text-amber-400 flex items-center gap-1.5">
+              <span>⚙️</span> <span data-i18n="find.scaleTitle">检索规模与范围</span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-slate-400 mb-1" data-i18n="find.maxSeeds">测试种子数</label>
+                <select id="filter-max" class="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-1.5 text-slate-100 focus:outline-none focus:border-brand-500">
+                  <option value="50">50</option>
+                  <option value="100" selected>100</option>
+                  <option value="200">200</option>
+                  <option value="500">500</option>
+                  <option value="1000">1000</option>
+                  <option value="2000">2000</option>
+                  <option value="5000">5000</option>
+                  <option value="10000">10000</option>
+                  <option value="20000">20000</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-slate-400 mb-1" data-i18n="find.startSeed">起始种子 (留空随机)</label>
+                <input 
+                  id="filter-start" 
+                  type="number" 
+                  placeholder="随机起始" 
+                  data-i18n-placeholder="find.startSeedPlaceholder"
+                  class="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-1.5 text-slate-100 focus:outline-none focus:border-brand-500 font-mono"
+                >
+              </div>
+            </div>
+
+            <!-- Parallel Concurrency / Worker Threads -->
+            <div>
+              <label class="block text-slate-400 mb-1 flex items-center justify-between">
+                <span class="flex items-center gap-1" data-i18n="find.threadsTitle">⚡ 多线程并发规模 (Worker Threads)</span>
+                <span id="threads-indicator-label" class="text-amber-400 font-mono text-[10px]">12 线程并发</span>
+              </label>
+              <select id="filter-threads" class="w-full bg-surface-900 border border-surface-700 rounded-lg px-3 py-1.5 text-slate-100 focus:outline-none focus:border-brand-500 font-semibold cursor-pointer">
+                <option value="16">🚀 16 Threads</option>
+                <option value="12" selected>⚡ 12 Threads</option>
+                <option value="8">⚖️ 8 Threads</option>
+                <option value="4">🛡️ 4 Threads</option>
+                <option value="2">🌱 2 Threads</option>
+                <option value="1">1 Thread</option>
+              </select>
+              <p class="text-[10px] text-slate-500 mt-1" data-i18n="find.threadsNote">每个线程独占独立游戏引擎上下文，多核算力全开，速度提升数倍！</p>
+            </div>
+          </div>
+
+          <!-- Start / Stop Actions -->
+          <div class="pt-1 flex items-center gap-3">
+            <button 
+              id="btn-search-start" 
+              type="button"
+              class="flex-1 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-surface-950 font-bold text-sm shadow-lg shadow-amber-500/20 active:scale-95 transition flex items-center justify-center gap-2"
+            >
+              <span>🚀</span>
+              <span data-i18n="find.btnStart">开始检索种子</span>
+              <span class="text-[11px] font-normal text-amber-950/80 hidden sm:inline">(Ctrl+Enter)</span>
+            </button>
+            <button 
+              id="btn-search-stop" 
+              type="button"
+              disabled
+              class="px-4 py-3 rounded-xl bg-surface-800 text-slate-400 hover:text-red-400 hover:bg-surface-700 border border-surface-700 font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed transition"
+              data-i18n="find.btnStop"
+            >
+              停止
+            </button>
+          </div>
+
+        </div>
+
+        <!-- Right: Progress Card & Interactive Matching Results (7 Cols) -->
+        <div class="lg:col-span-7 space-y-5">
+          
+          <!-- Search Live Progress Card -->
+          <div class="bg-surface-900 border border-surface-800 rounded-2xl p-5 shadow-xl space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-2">
+                <span id="search-spinner" class="inline-block w-3 h-3 rounded-full bg-slate-500"></span>
+                <span id="search-status-text" class="text-sm font-semibold text-slate-300" data-i18n="find.readyText">就绪，请配置左侧条件后检索</span>
+              </div>
+              <div class="flex items-center space-x-2">
+                <span class="text-xs text-slate-400">已命中: <b id="matches-count-badge" class="text-amber-400 font-bold text-sm">0</b> 种子</span>
+                <button id="btn-clear-results" class="text-xs text-slate-500 hover:text-slate-300 px-2 py-0.5 rounded bg-surface-800 border border-surface-700" title="清空结果" data-i18n="find.clearResults">清空</button>
+              </div>
+            </div>
+
+            <!-- Animated Progress Bar -->
+            <div class="w-full bg-surface-950 rounded-full h-3 border border-surface-800 overflow-hidden">
+              <div id="search-progress-bar" class="bg-gradient-to-r from-amber-500 to-amber-400 h-full w-0 transition-all duration-150"></div>
+            </div>
+
+            <!-- Real-time Counters -->
+            <div class="grid grid-cols-4 gap-2 text-center text-xs">
+              <div class="bg-surface-950 p-2 rounded-xl border border-surface-800">
+                <div class="text-slate-500" data-i18n="find.statTested">已测试</div>
+                <div id="stat-tested" class="text-sm font-mono font-bold text-slate-200">0</div>
+              </div>
+              <div class="bg-surface-950 p-2 rounded-xl border border-surface-800">
+                <div class="text-slate-500" data-i18n="find.statMatched">命中数</div>
+                <div id="stat-matched" class="text-sm font-mono font-bold text-emerald-400">0</div>
+              </div>
+              <div class="bg-surface-950 p-2 rounded-xl border border-surface-800">
+                <div class="text-slate-500" data-i18n="find.statSpeed">速度</div>
+                <div id="stat-speed" class="text-sm font-mono font-bold text-brand-400">-- 种/s</div>
+              </div>
+              <div class="bg-surface-950 p-2 rounded-xl border border-surface-800">
+                <div class="text-slate-500" data-i18n="find.statCurrent">当前扫描</div>
+                <div id="stat-current-seed" class="text-sm font-mono text-slate-400 truncate">--</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Matching Seeds & Seed Preview Split Workspace -->
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-start">
+            
+            <!-- Left: Match List (5 or 6 Cols) -->
+            <div class="md:col-span-5 space-y-3">
+              <div class="flex items-center justify-between pt-1">
+                <h3 class="font-bold text-sm flex items-center gap-1.5 text-slate-200">
+                  <span>💎</span> <span data-i18n="find.matchListTitle">匹配种子列表</span>
+                </h3>
+                <span class="text-[11px] text-slate-400" data-i18n="find.matchListHint">点击行即可右侧即时透视</span>
+              </div>
+
+              <!-- Matching Seeds Container -->
+              <div id="matches-container" class="space-y-2 max-h-[620px] overflow-y-auto pr-1">
+                <div id="matches-empty" class="text-center py-16 bg-surface-900 border border-surface-800/80 rounded-2xl text-slate-500 space-y-2">
+                  <div class="text-3xl">🎯</div>
+                  <div class="text-sm font-medium" data-i18n="find.matchEmptyTitle">配置左侧条件后开始检索</div>
+                  <div class="text-xs text-slate-600" data-i18n="find.matchEmptyDesc">命中种子会即时在此列出</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: In-place Seed Preview Card (7 Cols) -->
+            <div id="seed-preview-card" class="md:col-span-7 bg-surface-900 border border-surface-800 rounded-2xl p-4 shadow-xl space-y-4 sticky top-20 min-h-[400px]">
+              <div id="preview-placeholder" class="text-center py-20 text-slate-500 space-y-2">
+                <div class="text-3xl">👁️</div>
+                <div class="text-sm font-medium" data-i18n="find.previewPlaceholderTitle">选择左侧任意种子查看全息速览</div>
+                <div class="text-xs text-slate-600" data-i18n="find.previewPlaceholderDesc">无需跳转页面，同屏即时透视高亮命中项与楼层物资</div>
+              </div>
+
+              <div id="preview-content" class="hidden space-y-4">
+                <!-- Preview Header -->
+                <div class="flex items-center justify-between border-b border-surface-800 pb-3">
+                  <div>
+                    <div class="flex items-center space-x-2">
+                      <span class="text-xs text-slate-400" data-i18n="find.previewSelected">当前选中:</span>
+                      <span id="preview-seed-code" class="font-mono text-base font-bold text-amber-400">#--------</span>
+                    </div>
+                    <div id="preview-seed-subtitle" class="text-[11px] text-slate-500 font-mono mt-0.5">测试种子代码</div>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <button id="preview-copy-btn" class="px-2.5 py-1 rounded-lg bg-surface-800 hover:bg-surface-700 text-xs text-slate-200 border border-surface-700 transition" title="复制种子代码" data-i18n="find.previewCopy">
+                      📋 复制
+                    </button>
+                    <button id="preview-analyze-btn" class="px-3 py-1 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-surface-950 font-bold text-xs shadow-md shadow-amber-500/20 transition flex items-center gap-1" title="在透视模式中完整打开此种子">
+                      <span>🔍</span> <span data-i18n="find.previewAnalyze">深入透视</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Matched Reasons Highlights -->
+                <div class="space-y-1.5">
+                  <div class="text-xs font-semibold text-emerald-400 flex items-center gap-1">
+                    <span>🎯</span> <span data-i18n="find.previewVerifyTitle">命中条件核验:</span>
+                  </div>
+                  <div id="preview-matched-tags" class="flex flex-wrap gap-1.5">
+                    <!-- Populated dynamically -->
+                  </div>
+                </div>
+
+                <!-- Quick Macro Cards -->
+                <div class="grid grid-cols-3 gap-2 text-center text-xs">
+                  <div class="bg-surface-950 p-2 rounded-xl border border-surface-800">
+                    <div class="text-[10px] text-slate-500" data-i18n="find.previewMinetown">🏰 矿镇生态</div>
+                    <div id="preview-minetown" class="font-bold text-emerald-400 mt-0.5 truncate text-[11px]">正常</div>
+                  </div>
+                  <div class="bg-surface-950 p-2 rounded-xl border border-surface-800">
+                    <div class="text-[10px] text-slate-500" data-i18n="find.previewElf">🧝 精灵王国</div>
+                    <div id="preview-elf" class="font-bold text-emerald-400 mt-0.5 truncate text-[11px]">繁荣</div>
+                  </div>
+                  <div class="bg-surface-950 p-2 rounded-xl border border-surface-800">
+                    <div class="text-[10px] text-slate-500" data-i18n="find.previewSokoban">📦 仓库番入口</div>
+                    <div id="preview-sokoban" class="font-bold text-amber-400 mt-0.5 truncate text-[11px]">第 -- 层</div>
+                  </div>
+                </div>
+
+                <!-- Timeline / Key Items in Early Floors (<= 10 floors) -->
+                <div class="space-y-2 pt-1 border-t border-surface-800">
+                  <div class="flex items-center justify-between text-xs">
+                    <span class="font-semibold text-slate-300" data-i18n="find.previewEarlyArt">🗡️ 前期关键神器分布 (前 10 层):</span>
+                    <span id="preview-artifact-count-badge" class="text-slate-500 text-[11px]">共 0 件</span>
+                  </div>
+                  <div id="preview-artifacts-list" class="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+                    <!-- Dynamic artifact timeline rows -->
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Pathos Installation Directory Settings Modal -->
+  <div id="settings-modal" class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-surface-900 border border-surface-700 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-5 animate-in fade-in duration-200">
+      
+      <div class="flex items-center justify-between border-b border-surface-800 pb-3">
+        <div class="flex items-center space-x-2.5">
+          <span class="text-xl">⚙️</span>
+          <div>
+            <h3 class="font-bold text-base text-slate-100" data-i18n="settings.title">Pathos 游戏目录与版本设置</h3>
+            <p class="text-xs text-slate-400" data-i18n="settings.subtitle">指定电脑上的游戏安装根目录，即可无缝适配您的游戏版本</p>
+          </div>
+        </div>
+        <button id="btn-close-settings" class="text-slate-400 hover:text-slate-200 text-lg px-2">✕</button>
+      </div>
+
+      <!-- Current Status Alert -->
+      <div id="settings-status-box" class="p-3 rounded-xl bg-surface-950 border border-surface-800 flex items-center justify-between text-xs">
+        <div class="flex items-center space-x-2">
+          <span id="settings-status-icon">🎮</span>
+          <div>
+            <span class="text-slate-400" data-i18n="settings.mountStatus">挂载状态:</span>
+            <span id="settings-current-version" class="font-bold text-amber-400 ml-1" data-i18n="settings.checking">正在检查...</span>
+          </div>
+        </div>
+        <div id="settings-current-path" class="text-slate-500 font-mono text-[11px] truncate max-w-[260px]">--</div>
+      </div>
+
+      <!-- Auto Detected Candidates -->
+      <div id="settings-candidates-box" class="space-y-2">
+        <label class="block text-xs font-semibold text-slate-400 uppercase" data-i18n="settings.candidatesTitle">🔍 自动检测到的游戏安装位置 (点击可直接填入)</label>
+        <div id="settings-candidates-list" class="flex flex-wrap gap-1.5 text-xs">
+          <span class="text-slate-500 text-xs" data-i18n="settings.candidatesScanning">正在扫描常用安装路径...</span>
+        </div>
+      </div>
+
+      <!-- Manual Path Input & Browse Button -->
+      <div class="space-y-2">
+        <label class="block text-xs font-semibold text-slate-400 uppercase" data-i18n="settings.manualTitle">手动指定或浏览目录</label>
+        <div class="flex gap-2">
+          <input 
+            id="settings-path-input" 
+            type="text" 
+            placeholder="例如: C:\Games\Pathos 或 Steam 路径" 
+            data-i18n-placeholder="settings.placeholder"
+            class="flex-1 bg-surface-950 border border-surface-700 rounded-xl px-3.5 py-2 text-xs font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500 transition"
+          >
+          <button 
+            id="btn-settings-browse" 
+            type="button" 
+            class="px-4 py-2 bg-surface-800 hover:bg-surface-700 text-slate-200 border border-surface-700 rounded-xl text-xs font-medium flex items-center gap-1.5 active:scale-95 transition whitespace-nowrap"
+          >
+            <span>📁</span>
+            <span data-i18n="settings.browse">浏览文件夹</span>
+          </button>
+        </div>
+        <p class="text-[11px] text-slate-500" data-i18n="settings.tip">提示：必须包含 <code>PathosEngine.dll</code>、<code>PathosOfficial.dll</code> 以及 <code>Assets/Pathos.Codex</code>。</p>
+      </div>
+
+      <!-- Tileset Style Selection -->
+      <div class="space-y-2">
+        <label class="block text-xs font-semibold text-slate-400 uppercase flex items-center justify-between">
+          <span data-i18n="settings.tilesetTitle">🎨 游戏贴图风格 (Tileset)</span>
+          <span class="text-[11px] text-amber-400 normal-case" data-i18n="settings.tilesetDefault">默认: Sonyvanda 精致原版</span>
+        </label>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <label class="tileset-option flex flex-col items-center p-2.5 rounded-xl border border-surface-700 bg-surface-950/60 hover:border-brand-500 cursor-pointer transition select-none">
+            <input type="radio" name="settings-tileset" value="sonyvanda" class="sr-only">
+            <span class="text-lg mb-1">✨</span>
+            <span class="text-xs font-bold text-slate-200">Sonyvanda</span>
+            <span class="text-[10px] text-slate-400" data-i18n="settings.tilesetSonyvandaDesc">精致原版 (默认)</span>
+          </label>
+          <label class="tileset-option flex flex-col items-center p-2.5 rounded-xl border border-surface-700 bg-surface-950/60 hover:border-brand-500 cursor-pointer transition select-none">
+            <input type="radio" name="settings-tileset" value="classic" class="sr-only">
+            <span class="text-lg mb-1">👾</span>
+            <span class="text-xs font-bold text-slate-200">Classic</span>
+            <span class="text-[10px] text-slate-400" data-i18n="settings.tilesetClassicDesc">怀旧像素风</span>
+          </label>
+          <label class="tileset-option flex flex-col items-center p-2.5 rounded-xl border border-surface-700 bg-surface-950/60 hover:border-brand-500 cursor-pointer transition select-none">
+            <input type="radio" name="settings-tileset" value="geoduck" class="sr-only">
+            <span class="text-lg mb-1">📐</span>
+            <span class="text-xs font-bold text-slate-200">Geoduck</span>
+            <span class="text-[10px] text-slate-400" data-i18n="settings.tilesetGeoduckDesc">矢量平铺风</span>
+          </label>
+          <label class="tileset-option flex flex-col items-center p-2.5 rounded-xl border border-surface-700 bg-surface-950/60 hover:border-brand-500 cursor-pointer transition select-none">
+            <input type="radio" name="settings-tileset" value="absurd" class="sr-only">
+            <span class="text-lg mb-1">🎨</span>
+            <span class="text-xs font-bold text-slate-200">Absurd</span>
+            <span class="text-[10px] text-slate-400" data-i18n="settings.tilesetAbsurdDesc">高清手绘风</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Interface Language Selection -->
+      <div class="space-y-2">
+        <label class="block text-xs font-semibold text-slate-400 uppercase flex items-center justify-between">
+          <span data-i18n="settings.languageTitle">🌐 界面语言 (Interface Language)</span>
+          <span id="settings-lang-indicator" class="text-[11px] text-amber-400 normal-case">简体中文</span>
+        </label>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="language-option flex items-center justify-center gap-2 p-2.5 rounded-xl border border-surface-700 bg-surface-950/60 hover:border-brand-500 cursor-pointer transition select-none">
+            <input type="radio" name="settings-language" value="zh" class="sr-only">
+            <span class="text-base">🇨🇳</span>
+            <span class="text-xs font-bold text-slate-200" data-i18n="settings.langZh">简体中文 (Chinese)</span>
+          </label>
+          <label class="language-option flex items-center justify-center gap-2 p-2.5 rounded-xl border border-surface-700 bg-surface-950/60 hover:border-brand-500 cursor-pointer transition select-none">
+            <input type="radio" name="settings-language" value="en" class="sr-only">
+            <span class="text-base">🇺🇸</span>
+            <span class="text-xs font-bold text-slate-200" data-i18n="settings.langEn">English (英语)</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Error Feedback Box -->
+      <div id="settings-error-alert" class="p-3 rounded-xl bg-red-950/40 border border-red-800 text-red-400 text-xs hidden">
+      </div>
+
+      <!-- Actions Footer -->
+      <div class="flex items-center justify-end gap-2.5 pt-2 border-t border-surface-800">
+        <button id="btn-settings-cancel" class="px-4 py-2 rounded-xl bg-surface-800 hover:bg-surface-700 text-slate-300 text-xs font-medium transition" data-i18n="settings.cancel">
+          取消
+        </button>
+        <button id="btn-settings-save" class="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-surface-950 text-xs font-bold shadow-md shadow-amber-500/20 active:scale-95 transition flex items-center gap-1.5">
+          <span>✅</span>
+          <span data-i18n="settings.save">保存并挂载游戏</span>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="border-t border-surface-800/80 bg-surface-950 py-4 text-center text-xs text-slate-500">
+    Pathos: Nethack Codex 随机种子分析与筛选器 · 由 Antigravity 倾情打造
+  </footer>
+
+  <script src="/js/i18n.js"></script>
+  <script src="/js/app.js?v=jump-to-artifact-map-1.1"></script>
+</body>
+</html>
