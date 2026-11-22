@@ -1,7 +1,7 @@
 # 🌟 Pathos: Nethack Codex 随机种子分析与筛选器 (Seed Finder & Analyzer)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![.NET](https://img.shields.io/badge/.NET-8.0-blue.svg)](https://dotnet.microsoft.com/)
+[![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)]()
 
 <p align="center">
@@ -102,7 +102,7 @@ dotnet run -- filter --min-artifacts 18 --max 200
 
 ## 🛠️ 开发者构建与技术架构
 
-- **技术栈**：.NET 8.0 SDK / C# 12 / HTML5 Canvas
+- **技术栈**：.NET 10.0 SDK / C# 14 / HTML5 Canvas (原生适配游戏官方最新 .NET 10 引擎运行时)
 - **推演机制**：直接挂载游戏核心引擎库 `PathosEngine.dll`、`Inv.Library.dll` 及 `PathosOfficial.dll`，在独立 `AssemblyLoadContext` 中并行推演，完全杜绝模拟偏差，100% 还原真机生成逻辑。
 - **自定义编译**：若本地游戏安装在非默认路径，可通过 MSBuild 属性自定义编译：
   ```bash

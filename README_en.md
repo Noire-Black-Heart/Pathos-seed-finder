@@ -1,7 +1,7 @@
 # 🌟 Pathos: Nethack Codex Seed Finder & Analyzer
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![.NET](https://img.shields.io/badge/.NET-8.0-blue.svg)](https://dotnet.microsoft.com/)
+[![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)]()
 
 <p align="center">
@@ -102,7 +102,7 @@ dotnet run -- filter --min-artifacts 18 --max 200
 
 ## 🛠️ Architecture & Building from Source
 
-- **Tech Stack**: .NET 8.0 SDK / C# 12 / HTML5 Canvas
+- **Tech Stack**: .NET 10.0 SDK / C# 14 / HTML5 Canvas (Natively aligned with official latest .NET 10 engine runtime)
 - **Simulation Mechanism**: Dynamically attaches the game's core engine libraries (`PathosEngine.dll`, `Inv.Library.dll`, `PathosOfficial.dll`) in isolated `AssemblyLoadContext` instances to achieve 100% genuine parity with native generation logic.
 - **Custom Build**: If your Pathos installation is in a custom path, compile with MSBuild properties:
   ```bash

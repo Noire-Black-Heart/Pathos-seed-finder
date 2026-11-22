@@ -4,7 +4,7 @@
     <!-- NOTE: Must remain 'PathosSyntaxTest' to satisfy [InternalsVisibleTo("PathosSyntaxTest")] inside PathosEngine.dll -->
     <AssemblyName>PathosSyntaxTest</AssemblyName>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -12,6 +12,7 @@
     <NoWarn>$(NoWarn);MSB3277;CS8600;CS8602;CS8604</NoWarn>
     <ServerGarbageCollection>true</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <ThreadPoolMinThreads>16</ThreadPoolMinThreads>
     <!-- Configurable game installation path (override via -p:PathosDir="...") -->
     <PathosDir Condition="'$(PathosDir)' == ''">G:\games\Pathos</PathosDir>
   </PropertyGroup>
@@ -44,9 +45,10 @@
     <PackageReference Include="ICSharpCode.Decompiler" Version="11.2.0.10050" />
   </ItemGroup>
 
-  <Target Name="FixRuntimeConfig" AfterTargets="GenerateBuildRuntimeConfigurationFiles">
-    <Copy SourceFiles="$(PathosDir)\PathosGame.runtimeconfig.json" DestinationFiles="$(ProjectRuntimeConfigFilePath)" Condition="Exists('$(PathosDir)\PathosGame.runtimeconfig.json')" />
-    <Exec Command="powershell -Command &quot;$c = Get-Content '$(ProjectRuntimeConfigFilePath)' | ConvertFrom-Json; $c.runtimeOptions.configProperties | Add-Member -NotePropertyName 'System.GC.Server' -NotePropertyValue $true -Force; $c.runtimeOptions.configProperties | Add-Member -NotePropertyName 'System.GC.Concurrent' -NotePropertyValue $true -Force; $c.runtimeOptions.configProperties | Add-Member -NotePropertyName 'System.Threading.ThreadPool.MinThreads' -NotePropertyValue 16 -Force; $c | ConvertTo-Json -Depth 10 | Set-Content '$(ProjectRuntimeConfigFilePath)'&quot;" />
-  </Target>
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.Threading.ThreadPool.MinThreads" Value="16" />
+    <RuntimeHostConfigurationOption Include="System.Runtime.Serialization.EnableUnsafeBinaryFormatterSerialization" Value="false" />
+    <RuntimeHostConfigurationOption Include="CSWINRT_USE_WINDOWS_UI_XAML_PROJECTIONS" Value="false" />
+  </ItemGroup>
 
 </Project>
