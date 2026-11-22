@@ -4,6 +4,10 @@
 [![.NET](https://img.shields.io/badge/.NET-8.0-blue.svg)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)]()
 
+<p align="center">
+  <b>简体中文</b> | <a href="README_en.md">English</a>
+</p>
+
 专为 Roguelike 经典神作《**Pathos: Nethack Codex**》打造的高性能随机种子（Seed）透视、筛选与地牢地图可视化工具。
 
 基于游戏的底层引擎模拟算法开发，直接在内存中执行种子地牢生成，兼具毫秒级推演速度、100% 精确的真机还原度，以及直观华丽的现代 Web 可视化界面！
