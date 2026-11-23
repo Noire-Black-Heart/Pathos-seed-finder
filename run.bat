@@ -8,8 +8,10 @@ if exist "%LocalAppData%\Microsoft\dotnet\dotnet.exe" (
 )
 
 cd /d "%~dp0PathosSeedFinder"
-dotnet run --project PathosSeedFinder.csproj --no-build
-if errorlevel 1 (
+
+if exist "bin\Debug\net10.0-windows\PathosSyntaxTest.exe" (
+    dotnet run --project PathosSeedFinder.csproj --no-build
+) else (
     dotnet run --project PathosSeedFinder.csproj
 )
 pause
