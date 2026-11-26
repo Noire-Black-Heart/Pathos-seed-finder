@@ -427,6 +427,10 @@ namespace PathosSeedFinder.Core
             Action<int, string, SeedReport?>? onProgress = null,
             CancellationToken cancellationToken = default)
         {
+            EnsureRules(criteria);
+            var ctx = PathosContext.Instance;
+            var plan = ctx != null && ctx.IsReady ? CompiledFilterPlan.Compile(criteria, ctx.Translations) : null;
+
             int start = criteria.StartSeedNumber ?? Random.Shared.Next(1, 0x7FFFFFFF);
             int count = criteria.MaxSearchCount;
 
@@ -440,10 +444,18 @@ namespace PathosSeedFinder.Core
                     ? $"#{currentNum:X8}" 
                     : $"{criteria.SeedPrefix}{currentNum}";
 
-                SeedReport report;
+                SeedReport? matchedReport = null;
                 try
                 {
-                    report = SeedAnalyzer.Analyze(seedStr);
+                    if (plan != null && ctx != null)
+                    {
+                        matchedReport = SteppedSeedEvaluator.TryMatchSeed(seedStr, ctx, plan);
+                    }
+                    else
+                    {
+                        var report = SeedAnalyzer.Analyze(seedStr);
+                        if (Matches(report, criteria)) matchedReport = report;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -451,12 +463,11 @@ namespace PathosSeedFinder.Core
                     continue;
                 }
 
-                bool match = Matches(report, criteria);
-                onProgress?.Invoke(i + 1, seedStr, match ? report : null);
+                onProgress?.Invoke(i + 1, seedStr, matchedReport);
 
-                if (match)
+                if (matchedReport != null)
                 {
-                    yield return report;
+                    yield return matchedReport;
                 }
             }
         }
@@ -478,6 +489,9 @@ namespace PathosSeedFinder.Core
             int concurrency = Math.Clamp(workerCount, 1, WorkerPool.MaxCores);
             int start = criteria.StartSeedNumber ?? Random.Shared.Next(1, 0x7FFFFFFF);
             int totalCount = criteria.MaxSearchCount;
+
+            var baseTrans = PathosContext.Instance?.Translations ?? new TranslationManager();
+            var compiledPlan = CompiledFilterPlan.Compile(criteria, baseTrans);
 
             var channel = Channel.CreateUnbounded<SeedReport>(new UnboundedChannelOptions
             {
@@ -512,10 +526,10 @@ namespace PathosSeedFinder.Core
                             : $"{criteria.SeedPrefix}{num}";
 
                         PathosContext worker = await WorkerPool.RentAsync(pathosDir, ct);
-                        SeedReport? report = null;
+                        SeedReport? matchedReport = null;
                         try
                         {
-                            report = SeedAnalyzer.Analyze(seedStr, worker);
+                            matchedReport = SteppedSeedEvaluator.TryMatchSeed(seedStr, worker, compiledPlan);
                         }
                         catch (Exception ex)
                         {
@@ -530,17 +544,12 @@ namespace PathosSeedFinder.Core
                         double elapsedSec = Math.Max(0.001, sw.ElapsedMilliseconds / 1000.0);
                         double currentSpeed = currentTested / elapsedSec;
 
-                        bool match = false;
-                        if (report != null)
+                        if (matchedReport != null)
                         {
-                            match = Matches(report, criteria);
-                            if (match)
-                            {
-                                await channel.Writer.WriteAsync(report, ct);
-                            }
+                            await channel.Writer.WriteAsync(matchedReport, ct);
                         }
 
-                        onProgress?.Invoke(currentTested, seedStr, match ? report : null, currentSpeed);
+                        onProgress?.Invoke(currentTested, seedStr, matchedReport, currentSpeed);
                     });
                 }
                 catch (OperationCanceledException) { }

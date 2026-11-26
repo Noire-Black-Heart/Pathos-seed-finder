@@ -10,6 +10,31 @@ namespace PathosSeedFinder.Core
     {
         private static readonly object simulationLock = new();
 
+        internal static dynamic ParseSeed(string seedInput, PathosContext ctx)
+        {
+            seedInput = seedInput.Trim();
+
+            if (seedInput.StartsWith("#", StringComparison.OrdinalIgnoreCase))
+            {
+                return ctx.CreateSeed(seedInput);
+            }
+            else if (System.Text.RegularExpressions.Regex.IsMatch(seedInput, @"\A\b[0-9a-fA-F]{1,8}\b\Z"))
+            {
+                // Hex string without '#', normalize to '#HEX'
+                return ctx.CreateSeed("#" + seedInput);
+            }
+            else if (int.TryParse(seedInput, out int numericCode))
+            {
+                // Hex code formatted as decimal
+                return ctx.CreateSeedFromCode(numericCode);
+            }
+            else
+            {
+                // Plain text word/phrase
+                return ctx.CreateSeed(seedInput);
+            }
+        }
+
         public static SeedReport Analyze(string seedInput, PathosContext? externalContext = null)
         {
             var ctx = externalContext ?? PathosContext.Instance;
@@ -17,29 +42,7 @@ namespace PathosSeedFinder.Core
             {
                 throw new InvalidOperationException("尚未配置有效的 Pathos 游戏安装目录！请先点击右上角设置您的游戏目录。");
             }
-            seedInput = seedInput.Trim();
-
-            dynamic seed;
-            if (seedInput.StartsWith("#", StringComparison.OrdinalIgnoreCase))
-            {
-                seed = ctx.CreateSeed(seedInput);
-            }
-            else if (System.Text.RegularExpressions.Regex.IsMatch(seedInput, @"\A\b[0-9a-fA-F]{1,8}\b\Z"))
-            {
-                // Hex string without '#', normalize to '#HEX'
-                seed = ctx.CreateSeed("#" + seedInput);
-            }
-            else if (int.TryParse(seedInput, out int numericCode))
-            {
-                // Hex code formatted as decimal
-                seed = ctx.CreateSeedFromCode(numericCode);
-            }
-            else
-            {
-                // Plain text word/phrase
-                seed = ctx.CreateSeed(seedInput);
-            }
-
+            dynamic seed = ParseSeed(seedInput, ctx);
             return AnalyzeSeed(seed, ctx);
         }
 
@@ -632,21 +635,21 @@ namespace PathosSeedFinder.Core
             return report;
         }
 
-        private static bool IsMainDungeonMap(string rawName)
+        internal static bool IsMainDungeonMap(string rawName)
         {
             if (string.IsNullOrEmpty(rawName)) return false;
             return rawName.Contains("level//depth", StringComparison.OrdinalIgnoreCase) ||
                    System.Text.RegularExpressions.Regex.IsMatch(rawName, @"^(?:_?level//depth|_?Dungeon)\D*\d+", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
         }
 
-        private static int ExtractDungeonFloor(string rawName)
+        internal static int ExtractDungeonFloor(string rawName)
         {
             if (string.IsNullOrEmpty(rawName)) return 0;
             var m = System.Text.RegularExpressions.Regex.Match(rawName, @"(?:level//depth|Dungeon)\D*(\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             return m.Success && int.TryParse(m.Groups[1].Value, out int lvl) ? lvl : 0;
         }
 
-        private static MapLocation ResolveMapLocation(dynamic dm, TranslationManager trans)
+        internal static MapLocation ResolveMapLocation(dynamic dm, TranslationManager trans)
         {
             string rawSite = (string)(dm.Level?.Site?.Name ?? dm.Name ?? "Special");
             string siteClean = rawSite.Trim('_');

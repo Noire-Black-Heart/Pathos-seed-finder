@@ -112,6 +112,38 @@ namespace PathosSeedFinder.Core
         private MethodInfo commitShuffleMethod = null!;
         private MethodInfo reverseShuffleMethod = null!;
 
+        // Cached Engine constructor info to avoid reflection scan per seed
+        private ConstructorInfo? engineCtor;
+        private int engineCtorParamCount;
+
+        // Cached Stepped NetHackMaker hooks (gracefully optional for forward-compatibility)
+        public bool SupportsSteppedGeneration { get; private set; }
+        public Func<int, int>? NextNumberFunc { get; private set; }
+        public object? CodexObject { get; private set; }
+        public dynamic? StoneStaircaseUp { get; private set; }
+        public dynamic? StoneStaircaseDown { get; private set; }
+        public dynamic? ClayStaircaseUp { get; private set; }
+        public dynamic? ClayStaircaseDown { get; private set; }
+
+        private ConstructorInfo? netHackMakerCtor;
+        private MethodInfo? createCastleLevelMethod;
+        private MethodInfo? createCavernLevelMethod;
+        private MethodInfo? createNetherLevelMethod;
+        private MethodInfo? createFinaleLevelMethod;
+        private FieldInfo? fMinesIndex;
+        private FieldInfo? fSokobanIndex;
+        private FieldInfo? fFortIndex;
+        private FieldInfo? fChambersIndex;
+        private FieldInfo? fLabyrinthIndex;
+        private FieldInfo? fLairIndex;
+        private FieldInfo? fKingdomIndex;
+        private FieldInfo? fTowerIndex;
+        private FieldInfo? fMarketIndex;
+        private FieldInfo? fAbyssIndex;
+        private PropertyInfo? structureRoomsProp;
+        private PropertyInfo? roomIsolatedProp;
+        private MethodInfo? roomGetFloorSquaresMethod;
+
         public static bool TryInitialize(string? path, out string error)
         {
             lock (initLock)
@@ -278,8 +310,111 @@ namespace PathosSeedFinder.Core
                 throw new InvalidOperationException("在 Campaign 中未找到 'nethack codex' 模组！");
             }
 
+            // Cache Engine constructor once per isolated ALC
+            var ctors = EngineType.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            engineCtor = ctors.FirstOrDefault(c =>
+            {
+                var p = c.GetParameters();
+                return p.Length > 0 && p[0].ParameterType.IsInstanceOfType(Manifest);
+            }) ?? ctors.FirstOrDefault();
+            engineCtorParamCount = engineCtor?.GetParameters().Length ?? 1;
+
+            // Initialize optional Stepped NetHackMaker hooks for early-exit generation
+            try
+            {
+                var nextNumMethod = randomSupportType.GetMethod("NextNumber", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic, null, new[] { typeof(int) }, null);
+                var codexField = ((object)NethackModule).GetType().GetField("Codex", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+                var makerType = asmOfficial.GetType("Pathos.NetHackMaker");
+
+                if (nextNumMethod != null && codexField != null && makerType != null)
+                {
+                    NextNumberFunc = (Func<int, int>)Delegate.CreateDelegate(typeof(Func<int, int>), nextNumMethod);
+                    CodexObject = codexField.GetValue((object)NethackModule);
+                    netHackMakerCtor = makerType.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                        .FirstOrDefault(c => c.GetParameters().Length == 3);
+
+                    const BindingFlags privInst = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+                    createCastleLevelMethod = makerType.GetMethod("CreateCastleLevel", privInst);
+                    createCavernLevelMethod = makerType.GetMethod("CreateCavernLevel", privInst);
+                    createNetherLevelMethod = makerType.GetMethod("CreateNetherLevel", privInst);
+                    createFinaleLevelMethod = makerType.GetMethod("CreateFinaleLevel", privInst);
+
+                    fMinesIndex = makerType.GetField("MinesIndex", privInst);
+                    fSokobanIndex = makerType.GetField("SokobanIndex", privInst);
+                    fFortIndex = makerType.GetField("FortIndex", privInst);
+                    fChambersIndex = makerType.GetField("ChambersIndex", privInst);
+                    fLabyrinthIndex = makerType.GetField("LabyrinthIndex", privInst);
+                    fLairIndex = makerType.GetField("LairIndex", privInst);
+                    fKingdomIndex = makerType.GetField("KingdomIndex", privInst);
+                    fTowerIndex = makerType.GetField("TowerIndex", privInst);
+                    fMarketIndex = makerType.GetField("MarketIndex", privInst);
+                    fAbyssIndex = makerType.GetField("AbyssIndex", privInst);
+
+                    var dsType = createCastleLevelMethod?.ReturnType;
+                    var drType = makerType.GetNestedType("DungeonRoom", BindingFlags.NonPublic | BindingFlags.Public);
+                    structureRoomsProp = dsType?.GetProperty("Rooms", privInst);
+                    roomIsolatedProp = drType?.GetProperty("Isolated", privInst);
+                    roomGetFloorSquaresMethod = drType?.GetMethod("GetFloorSquares", privInst);
+
+                    if (CodexObject != null &&
+                        netHackMakerCtor != null &&
+                        createCastleLevelMethod != null &&
+                        createCavernLevelMethod != null &&
+                        createNetherLevelMethod != null &&
+                        createFinaleLevelMethod != null &&
+                        fMinesIndex != null && fSokobanIndex != null && fFortIndex != null &&
+                        fChambersIndex != null && fLabyrinthIndex != null && fLairIndex != null &&
+                        fKingdomIndex != null && fTowerIndex != null && fMarketIndex != null && fAbyssIndex != null &&
+                        structureRoomsProp != null && roomIsolatedProp != null && roomGetFloorSquaresMethod != null)
+                    {
+                        dynamic portals = ((dynamic)CodexObject).Portals;
+                        StoneStaircaseUp = portals.stone_staircase_up;
+                        StoneStaircaseDown = portals.stone_staircase_down;
+                        ClayStaircaseUp = portals.clay_staircase_up;
+                        ClayStaircaseDown = portals.clay_staircase_down;
+                        SupportsSteppedGeneration = true;
+                    }
+                }
+            }
+            catch
+            {
+                SupportsSteppedGeneration = false;
+            }
+
             IsReady = true;
         }
+
+        public object CreateNetHackMaker(dynamic generator)
+        {
+            return netHackMakerCtor!.Invoke(new object[] { CodexObject!, (object)generator, false })!;
+        }
+
+        public void SetMakerIndices(object maker, BranchIndices idx)
+        {
+            fMinesIndex!.SetValue(maker, idx.Mines);
+            fSokobanIndex!.SetValue(maker, idx.Sokoban);
+            fFortIndex!.SetValue(maker, idx.Fort);
+            fChambersIndex!.SetValue(maker, idx.Chambers);
+            fLabyrinthIndex!.SetValue(maker, idx.Labyrinth);
+            fLairIndex!.SetValue(maker, idx.Lair);
+            fKingdomIndex!.SetValue(maker, idx.Kingdom);
+            fTowerIndex!.SetValue(maker, idx.Tower);
+            fMarketIndex!.SetValue(maker, idx.Market);
+            fAbyssIndex!.SetValue(maker, idx.Abyss);
+        }
+
+        public object InvokeCreateLevel(object maker, int floor, dynamic level)
+        {
+            MethodInfo m = floor < 20 ? createCastleLevelMethod!
+                         : floor < 30 ? createCavernLevelMethod!
+                         : floor < 40 ? createNetherLevelMethod!
+                         : createFinaleLevelMethod!;
+            return m.Invoke(maker, new object[] { (object)level })!;
+        }
+
+        public IEnumerable GetStructureRooms(object dungeonStructure) => (IEnumerable)structureRoomsProp!.GetValue(dungeonStructure)!;
+        public bool IsRoomIsolated(object dungeonRoom) => (bool)roomIsolatedProp!.GetValue(dungeonRoom)!;
+        public IEnumerable GetRoomFloorSquares(object dungeonRoom) => (IEnumerable)roomGetFloorSquaresMethod!.Invoke(dungeonRoom, null)!;
 
         public dynamic CreateSeed(string seedText)
         {
@@ -313,26 +448,12 @@ namespace PathosSeedFinder.Core
 
         public dynamic CreateEngine(dynamic seed, bool masterMode = false, bool abolition = false)
         {
-            var ctors = EngineType.GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            var ctor = ctors.FirstOrDefault(c =>
-            {
-                var p = c.GetParameters();
-                return p.Length > 0 && p[0].ParameterType.IsInstanceOfType(Manifest);
-            }) ?? ctors.FirstOrDefault();
+            object[] args = new object[engineCtorParamCount];
+            if (engineCtorParamCount > 0) args[0] = Manifest;
 
-            object[] args;
-            if (ctor != null)
-            {
-                var p = ctor.GetParameters();
-                args = new object[p.Length];
-                if (p.Length > 0) args[0] = Manifest;
-            }
-            else
-            {
-                args = new object[] { Manifest };
-            }
-
-            dynamic engine = Activator.CreateInstance(EngineType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, args, null)!;
+            dynamic engine = engineCtor != null
+                ? engineCtor.Invoke(args)
+                : Activator.CreateInstance(EngineType, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, args, null)!;
             dynamic adventure = engine.Adventure;
             adventure.SetMasterMode(masterMode);
             adventure.SetAbolition(abolition);
