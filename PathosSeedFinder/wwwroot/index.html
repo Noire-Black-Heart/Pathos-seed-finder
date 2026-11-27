@@ -332,9 +332,18 @@
             <!-- Hint ribbon -->
             <div class="flex items-center justify-between text-xs text-slate-400 bg-surface-950/40 px-3 py-2 rounded-xl border border-surface-800/60">
               <span class="flex items-center gap-1.5" data-i18n="id.hint">
-                <span>💡</span> 游戏中所有未鉴定的药水、卷轴、魔杖等道具外观均为开局随机生成，本表已为您完全破译当前种子的映射关系！
+                💡 本表显示的是当前种子「未经过开局重掷（Reroll）」时的初始药水、卷轴、魔杖、戒指等外观对应表。
               </span>
-              <span id="identities-count-hint" class="font-mono text-amber-400 font-semibold">共 0 项</span>
+              <span id="identities-count-hint" class="font-mono text-amber-400 font-semibold shrink-0 ml-3">共 0 项</span>
+            </div>
+
+            <!-- Reroll Warning Banner -->
+            <div class="flex items-start gap-2.5 text-xs bg-amber-500/10 border border-amber-500/30 text-amber-200/95 px-3.5 py-2.5 rounded-xl leading-relaxed">
+              <span class="text-base leading-none shrink-0 mt-0.5">⚠️</span>
+              <div>
+                <span class="font-bold text-amber-300" data-i18n="id.rerollWarningTitle">开局重掷（Reroll）提示：</span>
+                <span data-i18n="id.rerollWarningBody">在游戏开局预览界面点击“重掷角色（Reroll）”刷属性/技能时，官方引擎会按系统时间重新洗牌所有未鉴定道具的外观，导致本表失效。但地图布局、神器位置以及【全层地图透视】中每个坐标点上道具的真实种类均不会改变——对照透视地图上的实际坐标拾取即可轻松反推重掷后的新外观！</span>
+              </div>
             </div>
 
             <!-- Identified Items Table -->
@@ -470,10 +479,45 @@
 
           <!-- Shops Tab Content -->
           <div id="subtab-shops-content" class="hidden space-y-4">
-            <div class="bg-amber-950/20 border border-amber-900/40 rounded-xl p-3 text-xs text-amber-300 flex items-center justify-between">
-              <span data-i18n="shops.tip">⭐ 前期关键商业区（主地牢 1~10 层、矿镇 1 层）的物资对于前期平稳破局至关重要！</span>
-              <span id="shops-count-badge" class="font-bold">共 0 处设施</span>
+            <!-- Shop Search & Earliest Quick-Finder Controls -->
+            <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+              <div class="flex-1 max-w-md relative">
+                <input
+                  id="shop-filter-input"
+                  type="text"
+                  placeholder="搜索商店/设施、店主或区域 (如 祭坛、制作站点、古兵器、黑市)..."
+                  data-i18n-placeholder="shops.filterPlaceholder"
+                  class="w-full bg-surface-950 border border-surface-700/80 rounded-xl px-3.5 py-1.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500 transition"
+                >
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <button id="shop-dungeon-only-toggle" type="button" class="px-3 py-1.5 rounded-xl bg-surface-800 hover:bg-surface-700 text-slate-300 border border-surface-700/80 font-medium transition whitespace-nowrap" data-i18n="shops.dungeonOnly">
+                  🏰 仅看主地牢
+                </button>
+                <button id="shop-filter-reset" type="button" class="hidden px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40 font-medium transition whitespace-nowrap" data-i18n="shops.resetFilter">
+                  ✕ 显示全部
+                </button>
+              </div>
             </div>
+
+            <!-- Earliest Appearance Quick Finder Panel -->
+            <div class="bg-surface-950/60 border border-surface-800 rounded-xl p-3 space-y-2.5">
+              <div class="flex items-center justify-between text-xs">
+                <span class="font-bold text-amber-300 flex items-center gap-1.5" data-i18n="shops.earliestTitle">
+                  ⚡ 各类商店 / 设施最早出现速查（点击筛选，点 📍 直达透视地图）
+                </span>
+                <span id="shops-count-badge" class="font-mono text-amber-400 font-bold shrink-0 ml-2">共 0 处设施</span>
+              </div>
+              <div id="shops-earliest-summary" class="flex flex-wrap gap-2">
+                <!-- Injected via JS -->
+              </div>
+            </div>
+
+            <div class="bg-amber-950/20 border border-amber-900/40 rounded-xl px-3 py-2 text-xs text-amber-300 flex items-center justify-between">
+              <span data-i18n="shops.tip">⭐ 前期关键商业区（主地牢 1~10 层、矿镇 1 层）的物资对于前期平稳破局至关重要！</span>
+              <span id="shops-filtered-hint" class="font-mono text-slate-400 shrink-0 ml-2"></span>
+            </div>
+
             <div id="shops-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               <div class="text-slate-500 text-center col-span-3 py-6" data-i18n="shops.loading">正在加载商店数据...</div>
             </div>

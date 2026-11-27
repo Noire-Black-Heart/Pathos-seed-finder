@@ -54,6 +54,7 @@ namespace PathosSeedFinder.Core
 
             seedCode = (int)seed.Code;
 
+            lock (ctx.SimulationLock)
             lock (simulationLock)
             {
                 if (cachedAdventure != null && (cachedSeedInput.Equals(seedInput, StringComparison.OrdinalIgnoreCase) || cachedSeedCode == seedCode))
@@ -396,7 +397,9 @@ namespace PathosSeedFinder.Core
                 string? passageDest = dsq.Passage?.Destination?.ToString();
 
                 string? fixture = dsq.Fixture?.Feature?.ToString();
+                string? fixtureCn = !string.IsNullOrEmpty(fixture) ? trans.TranslateFeature(fixture) : null;
                 string? fixtureGlyph = dsq.Fixture?.Glyph?.ToString();
+                string? fixtureSanctity = ExtractFixtureSanctity(dsq.Fixture);
 
                 string? spill = dsq.Spill?.ToString();
                 string? spillGlyph = spill;
@@ -441,7 +444,9 @@ namespace PathosSeedFinder.Core
                     PassageGlyph = passageGlyph,
                     PassageDest = passageDest,
                     Fixture = fixture,
+                    FixtureChinese = fixtureCn,
                     FixtureGlyph = fixtureGlyph,
+                    FixtureSanctity = fixtureSanctity,
                     Spill = spill,
                     SpillGlyph = spillGlyph,
                     Boulder = boulder,
@@ -520,6 +525,7 @@ namespace PathosSeedFinder.Core
                                 IsArtifact = isArt,
                                 BoulderName = boulderName,
                                 BoulderChinese = boulderCn,
+                                Sanctity = ExtractSanctity(da),
                                 Count = count
                             });
                         }
@@ -554,21 +560,22 @@ namespace PathosSeedFinder.Core
                                         {
                                             X = x,
                                             Y = y,
-                                        Name = iname,
-                                        NameChinese = inameCn,
-                                        Glyph = glyph,
-                                        State = hasBoulder ? "covered" : "container",
-                                        IsArtifact = isArt,
-                                        ContainerName = containerName,
-                                        ContainerChinese = containerCn,
-                                        BoulderName = boulderName,
-                                        BoulderChinese = boulderCn,
-                                        Count = count
-                                    });
+                                            Name = iname,
+                                            NameChinese = inameCn,
+                                            Glyph = glyph,
+                                            State = hasBoulder ? "covered" : "container",
+                                            IsArtifact = isArt,
+                                            ContainerName = containerName,
+                                            ContainerChinese = containerCn,
+                                            BoulderName = boulderName,
+                                            BoulderChinese = boulderCn,
+                                            Sanctity = ExtractSanctity(dinside),
+                                            Count = count
+                                        });
+                                    }
                                 }
                             }
                         }
-                    }
                     }
                 }
 
@@ -606,6 +613,7 @@ namespace PathosSeedFinder.Core
                                 IsArtifact = isArt,
                                 CarrierName = cname,
                                 CarrierChinese = cnameCn,
+                                Sanctity = ExtractSanctity(da),
                                 Count = count
                             });
                         }
@@ -618,6 +626,35 @@ namespace PathosSeedFinder.Core
             }
 
             return items;
+        }
+
+        private static string? ExtractSanctity(dynamic asset)
+        {
+            try
+            {
+                if (asset.HasSanctity != true || asset.Sanctity == null) return null;
+                string? raw = (string?)(asset.Sanctity.Name ?? asset.Sanctity.ToString());
+                return string.IsNullOrWhiteSpace(raw) ? null : raw.Trim().ToLowerInvariant();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string? ExtractFixtureSanctity(dynamic? fixture)
+        {
+            if (fixture == null) return null;
+            try
+            {
+                if (fixture.Sanctity == null) return null;
+                string? raw = (string?)(fixture.Sanctity.Name ?? fixture.Sanctity.ToString());
+                return string.IsNullOrWhiteSpace(raw) ? null : raw.Trim().ToLowerInvariant();
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private static List<ShopMarkerData> ExtractShops(dynamic targetMap, string mapRawName, int left, int top, TranslationManager trans)
@@ -833,8 +870,16 @@ namespace PathosSeedFinder.Core
             if (dsq.Fixture != null)
             {
                 string fName = dsq.Fixture.Feature?.ToString() ?? "";
-                string cn = trans.TranslateBlock(fName);
-                parts.Add($"✨ {cn}");
+                string cn = trans.TranslateFeature(fName);
+                string? fSanctity = ExtractFixtureSanctity(dsq.Fixture);
+                string bucPrefix = fSanctity switch
+                {
+                    "blessed" => "[祝福] ",
+                    "cursed" => "[诅咒] ",
+                    "uncursed" => "[未诅咒] ",
+                    _ => ""
+                };
+                parts.Add($"✨ {bucPrefix}{cn}");
             }
 
             if (dsq.Boulder != null)

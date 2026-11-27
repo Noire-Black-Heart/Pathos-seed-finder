@@ -32,7 +32,9 @@ namespace PathosSeedFinder.Core
         public string? PassageGlyph { get; set; }
         public string? PassageDest { get; set; }
         public string? Fixture { get; set; }
+        public string? FixtureChinese { get; set; }
         public string? FixtureGlyph { get; set; }
+        public string? FixtureSanctity { get; set; } // "blessed", "uncursed", "cursed", or null
         public string? Spill { get; set; }
         public string? SpillGlyph { get; set; }
         public string? Boulder { get; set; }
@@ -78,6 +80,7 @@ namespace PathosSeedFinder.Core
         public string? ContainerChinese { get; set; }
         public string? BoulderName { get; set; }
         public string? BoulderChinese { get; set; }
+        public string? Sanctity { get; set; } // "blessed", "uncursed", "cursed", or null if no sanctity
         public int Count { get; set; } = 1;
     }
 

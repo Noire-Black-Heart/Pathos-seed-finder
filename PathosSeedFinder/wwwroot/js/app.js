@@ -715,40 +715,275 @@ document.addEventListener('DOMContentLoaded', () => {
     }).join('');
   }
 
+  function escapeHtml(str) {
+    return String(str ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  let activeShopTypeFilter = 'all';
+  let shopDungeonOnly = false;
+
+  function isMainDungeonSite(site) {
+    if (!site) return false;
+    const s = site.toLowerCase();
+    return s === 'dungeon' || s === '主地牢' || s === '地牢';
+  }
+
+  function compareShopEarliest(a, b) {
+    const da = (a.dungeonLevel && a.dungeonLevel > 0) ? a.dungeonLevel : (a.levelIndex || 999);
+    const db = (b.dungeonLevel && b.dungeonLevel > 0) ? b.dungeonLevel : (b.levelIndex || 999);
+    if (da !== db) return da - db;
+    // Prefer Main Dungeon over branch when equivalent depth ties
+    const aMain = isMainDungeonSite(a.site) ? 0 : 1;
+    const bMain = isMainDungeonSite(b.site) ? 0 : 1;
+    if (aMain !== bMain) return aMain - bMain;
+    const la = a.levelIndex || 0;
+    const lb = b.levelIndex || 0;
+    if (la !== lb) return la - lb;
+    return (a.englishType || '').localeCompare(b.englishType || '');
+  }
+
+  function formatShopShortDepth(s, isEn) {
+    const isMain = isMainDungeonSite(s.site);
+    const dLvl = (s.dungeonLevel && s.dungeonLevel > 0) ? s.dungeonLevel : (s.levelIndex || 1);
+    if (isMain) {
+      return isEn ? `L${dLvl}` : `主地牢 ${dLvl}层`;
+    }
+    const siteLabel = isEn
+      ? (s.site || s.siteChinese || '')
+      : (s.subArea || s.siteChinese || s.site || '');
+    return isEn
+      ? `${siteLabel} (≈L${dLvl})`
+      : `${siteLabel} (折算${dLvl}层)`;
+  }
+
   function renderShops(shops) {
     const grid = document.getElementById('shops-grid');
+    const summaryEl = document.getElementById('shops-earliest-summary');
+    const filteredHint = document.getElementById('shops-filtered-hint');
+    const resetBtn = document.getElementById('shop-filter-reset');
+    const searchInput = document.getElementById('shop-filter-input');
     const isEn = I18N.getLanguage() === 'en';
-    document.getElementById('shops-count-badge').textContent = I18N.t('shops.countBadge', shops ? shops.length : 0);
-    if (!shops || shops.length === 0) {
+    const allShops = shops || [];
+
+    document.getElementById('shops-count-badge').textContent = I18N.t('shops.countBadge', allShops.length);
+
+    if (allShops.length === 0) {
+      if (summaryEl) summaryEl.innerHTML = `<span class="text-xs text-slate-500">${I18N.t('shops.empty')}</span>`;
+      if (filteredHint) filteredHint.textContent = '';
       grid.innerHTML = `<div class="text-slate-500 text-center col-span-3 py-6">${I18N.t('shops.empty')}</div>`;
       return;
     }
 
-    grid.innerHTML = shops.map(s => {
-      const isEarly = s.dungeonLevel <= 10;
+    const scopeShops = shopDungeonOnly
+      ? allShops.filter(s => isMainDungeonSite(s.site))
+      : allShops;
+
+    // 1. Build earliest appearance map per shop/facility type
+    const byType = new Map();
+    for (const s of scopeShops) {
+      const key = (s.englishType || s.chineseType || 'unknown').toLowerCase();
+      if (!byType.has(key)) {
+        byType.set(key, []);
+      }
+      byType.get(key).push(s);
+    }
+
+    const earliestEntries = [];
+    byType.forEach((list, key) => {
+      list.sort(compareShopEarliest);
+      earliestEntries.push({
+        key,
+        earliest: list[0],
+        count: list.length
+      });
+    });
+    earliestEntries.sort((a, b) => compareShopEarliest(a.earliest, b.earliest));
+
+    // If previously selected type no longer exists in current scope, reset to 'all'
+    if (activeShopTypeFilter !== 'all' && !byType.has(activeShopTypeFilter)) {
+      activeShopTypeFilter = 'all';
+    }
+
+    if (summaryEl) {
+      if (earliestEntries.length === 0) {
+        summaryEl.innerHTML = `<span class="text-xs text-slate-500">${I18N.t('shops.empty')}</span>`;
+      } else {
+        summaryEl.innerHTML = earliestEntries.map(({ key, earliest, count }) => {
+          const isSelected = activeShopTypeFilter === key;
+          const label = isEn ? (earliest.englishType || earliest.chineseType) : (earliest.chineseType || earliest.englishType);
+          const depthText = formatShopShortDepth(earliest, isEn);
+          const dLvl = (earliest.dungeonLevel && earliest.dungeonLevel > 0) ? earliest.dungeonLevel : (earliest.levelIndex || 99);
+          const depthColor = dLvl <= 5
+            ? 'text-emerald-300'
+            : dLvl <= 10
+            ? 'text-amber-300'
+            : 'text-slate-400';
+
+          return `
+            <div class="inline-flex items-center rounded-lg border transition text-xs overflow-hidden ${isSelected ? 'bg-brand-500/20 border-brand-400 shadow-sm shadow-brand-500/20' : 'bg-surface-900/90 border-surface-700/80 hover:border-amber-500/50'}">
+              <button type="button" class="shop-earliest-chip px-2.5 py-1.5 flex items-center gap-1.5 text-left" data-shop-key="${escapeHtml(key)}">
+                <span class="font-semibold ${isSelected ? 'text-brand-200' : 'text-slate-200'}">${escapeHtml(label)}</span>
+                <span class="font-mono font-bold ${depthColor}">${escapeHtml(depthText)}</span>
+                <span class="text-[10px] text-slate-500 font-mono">×${count}</span>
+              </button>
+              <button type="button" class="shop-jump-btn px-1.5 py-1.5 border-l border-surface-800 hover:bg-brand-500/20 text-slate-400 hover:text-amber-300 transition"
+                title="${isEn ? 'Jump to earliest on map' : '跳转到最早出现位置的地图'}"
+                data-raw="${escapeHtml(earliest.mapRawName || '')}"
+                data-site="${escapeHtml(earliest.site || '')}"
+                data-lvl="${earliest.levelIndex || 1}"
+                data-x="${earliest.x || 0}"
+                data-y="${earliest.y || 0}"
+                data-name="${escapeHtml(label)}">📍</button>
+            </div>
+          `;
+        }).join('');
+
+        summaryEl.querySelectorAll('.shop-earliest-chip').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const key = btn.getAttribute('data-shop-key');
+            activeShopTypeFilter = (activeShopTypeFilter === key) ? 'all' : key;
+            renderShops(currentReport ? currentReport.shops : allShops);
+          });
+        });
+
+        summaryEl.querySelectorAll('.shop-jump-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            jumpToArtifactMap(
+              btn.getAttribute('data-raw') || '',
+              btn.getAttribute('data-site') || '',
+              parseInt(btn.getAttribute('data-lvl') || '1', 10),
+              parseInt(btn.getAttribute('data-x') || '0', 10),
+              parseInt(btn.getAttribute('data-y') || '0', 10),
+              btn.getAttribute('data-name') || ''
+            );
+          });
+        });
+      }
+    }
+
+    // 2. Apply type + text filter and sort earliest-first
+    const query = (searchInput?.value || '').trim().toLowerCase();
+    const filtered = scopeShops.filter(s => {
+      if (activeShopTypeFilter !== 'all') {
+        const key = (s.englishType || s.chineseType || 'unknown').toLowerCase();
+        if (key !== activeShopTypeFilter) return false;
+      }
+      if (query) {
+        const hay = `${s.chineseType || ''} ${s.englishType || ''} ${s.merchantName || ''} ${s.site || ''} ${s.siteChinese || ''} ${s.subArea || ''}`.toLowerCase();
+        if (!hay.includes(query)) return false;
+      }
+      return true;
+    }).sort(compareShopEarliest);
+
+    const hasActiveFilter = activeShopTypeFilter !== 'all' || !!query || shopDungeonOnly;
+    if (resetBtn) {
+      resetBtn.classList.toggle('hidden', !hasActiveFilter);
+    }
+    if (filteredHint) {
+      filteredHint.textContent = I18N.t('shops.filteredHint', filtered.length, allShops.length);
+    }
+
+    if (filtered.length === 0) {
+      grid.innerHTML = `<div class="text-slate-500 text-center col-span-3 py-6">${I18N.t('shops.empty')}</div>`;
+      return;
+    }
+
+    // Track earliest instance of each type within the current scope so we can badge it
+    const earliestOfTypeSet = new Set(earliestEntries.map(e => e.earliest));
+
+    grid.innerHTML = filtered.map((s, idx) => {
+      const dLvl = (s.dungeonLevel && s.dungeonLevel > 0) ? s.dungeonLevel : (s.levelIndex || 99);
+      const isEarly = dLvl <= 10;
+      const isTypeEarliest = earliestOfTypeSet.has(s) && (activeShopTypeFilter !== 'all' || !!query || idx === 0);
       const typePrimary = isEn ? (s.englishType || s.chineseType) : (s.chineseType || s.englishType);
       const typeSecondary = isEn ? (s.chineseType !== s.englishType ? s.chineseType : '') : s.englishType;
       const locStr = I18N.formatLocation(s.site, s.siteChinese, s.levelIndex, s.dungeonLevel, s.subArea);
       const keeperName = s.merchantName || I18N.t('shops.noKeeper');
 
       return `
-        <div class="bg-surface-950/80 border ${isEarly ? 'border-amber-700/50' : 'border-surface-800'} rounded-xl p-3 flex flex-col justify-between hover:border-brand-500 transition">
+        <div class="bg-surface-950/80 border ${isTypeEarliest ? 'border-emerald-500/70 shadow-md shadow-emerald-950/40' : isEarly ? 'border-amber-700/50' : 'border-surface-800'} rounded-xl p-3 flex flex-col justify-between hover:border-brand-500 transition">
           <div>
-            <div class="flex items-center justify-between mb-1.5">
-              <span class="font-bold text-slate-200 font-sans text-sm">${typePrimary}</span>
-              <span class="text-xs font-mono px-1.5 py-0.5 rounded ${isEarly ? 'bg-amber-950 text-amber-300 border border-amber-800' : 'bg-surface-800 text-slate-400'}">
-                ${locStr}
+            <div class="flex items-start justify-between gap-2 mb-1.5">
+              <div class="flex items-center flex-wrap gap-1.5 min-w-0">
+                <span class="font-bold text-slate-200 font-sans text-sm">${escapeHtml(typePrimary)}</span>
+                ${isTypeEarliest ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-950/90 text-emerald-300 border border-emerald-700/80 whitespace-nowrap">${I18N.t('shops.earliestBadge')}</span>` : ''}
+              </div>
+              <span class="text-xs font-mono px-1.5 py-0.5 rounded shrink-0 ${isEarly ? 'bg-amber-950 text-amber-300 border border-amber-800' : 'bg-surface-800 text-slate-400'}">
+                ${escapeHtml(locStr)}
               </span>
             </div>
-            ${typeSecondary ? `<div class="text-xs text-slate-500 font-mono mb-2">${typeSecondary}</div>` : ''}
+            ${typeSecondary ? `<div class="text-xs text-slate-500 font-mono mb-2">${escapeHtml(typeSecondary)}</div>` : ''}
           </div>
-          <div class="text-xs pt-2 border-t border-surface-800 flex items-center justify-between text-slate-400">
-            <span>${I18N.t('shops.keeper')} <b class="text-slate-300">${keeperName}</b></span>
-            <span class="font-mono text-slate-500">(${s.x}, ${s.y})</span>
+          <div class="text-xs pt-2 border-t border-surface-800 flex items-center justify-between gap-2 text-slate-400">
+            <span class="truncate">${I18N.t('shops.keeper')} <b class="text-slate-300">${escapeHtml(keeperName)}</b></span>
+            <div class="flex items-center gap-2 shrink-0">
+              <span class="font-mono text-slate-500">(${s.x}, ${s.y})</span>
+              <button type="button" class="shop-card-jump px-2 py-0.5 rounded-md bg-surface-800 hover:bg-brand-500/20 text-slate-300 hover:text-amber-300 border border-surface-700/80 text-[11px] transition"
+                data-raw="${escapeHtml(s.mapRawName || '')}"
+                data-site="${escapeHtml(s.site || '')}"
+                data-lvl="${s.levelIndex || 1}"
+                data-x="${s.x || 0}"
+                data-y="${s.y || 0}"
+                data-name="${escapeHtml(typePrimary)}">${I18N.t('shops.jumpMap')}</button>
+            </div>
           </div>
         </div>
       `;
     }).join('');
+
+    grid.querySelectorAll('.shop-card-jump').forEach(btn => {
+      btn.addEventListener('click', () => {
+        jumpToArtifactMap(
+          btn.getAttribute('data-raw') || '',
+          btn.getAttribute('data-site') || '',
+          parseInt(btn.getAttribute('data-lvl') || '1', 10),
+          parseInt(btn.getAttribute('data-x') || '0', 10),
+          parseInt(btn.getAttribute('data-y') || '0', 10),
+          btn.getAttribute('data-name') || ''
+        );
+      });
+    });
+  }
+
+  // Shop Filter Controls Events
+  const shopFilterInput = document.getElementById('shop-filter-input');
+  if (shopFilterInput) {
+    shopFilterInput.addEventListener('input', () => {
+      if (currentReport) renderShops(currentReport.shops || []);
+    });
+  }
+
+  const shopDungeonOnlyToggle = document.getElementById('shop-dungeon-only-toggle');
+  if (shopDungeonOnlyToggle) {
+    shopDungeonOnlyToggle.addEventListener('click', () => {
+      shopDungeonOnly = !shopDungeonOnly;
+      shopDungeonOnlyToggle.classList.toggle('bg-brand-500', shopDungeonOnly);
+      shopDungeonOnlyToggle.classList.toggle('text-surface-950', shopDungeonOnly);
+      shopDungeonOnlyToggle.classList.toggle('font-bold', shopDungeonOnly);
+      shopDungeonOnlyToggle.classList.toggle('bg-surface-800', !shopDungeonOnly);
+      shopDungeonOnlyToggle.classList.toggle('text-slate-300', !shopDungeonOnly);
+      if (currentReport) renderShops(currentReport.shops || []);
+    });
+  }
+
+  const shopFilterReset = document.getElementById('shop-filter-reset');
+  if (shopFilterReset) {
+    shopFilterReset.addEventListener('click', () => {
+      activeShopTypeFilter = 'all';
+      shopDungeonOnly = false;
+      if (shopFilterInput) shopFilterInput.value = '';
+      if (shopDungeonOnlyToggle) {
+        shopDungeonOnlyToggle.classList.remove('bg-brand-500', 'text-surface-950', 'font-bold');
+        shopDungeonOnlyToggle.classList.add('bg-surface-800', 'text-slate-300');
+      }
+      if (currentReport) renderShops(currentReport.shops || []);
+    });
   }
 
   function renderSokobanDetails(soko) {
@@ -2524,6 +2759,26 @@ document.addEventListener('DOMContentLoaded', () => {
         if (showFixtures && t.fixtureGlyph) {
           const fixtureImg = getTileImage(t.fixtureGlyph);
           if (fixtureImg) mapCtx.drawImage(fixtureImg, dx, dy, baseTileSize, baseTileSize);
+
+          // Highlight Blessed / Cursed fixtures directly on map (e.g. fountains, altars)
+          if (t.fixtureSanctity === 'blessed' || t.fixtureSanctity === 'cursed') {
+            const isBlessed = t.fixtureSanctity === 'blessed';
+            mapCtx.save();
+            mapCtx.strokeStyle = isBlessed ? '#10b981' : '#f43f5e';
+            mapCtx.lineWidth = 1.6;
+            mapCtx.strokeRect(dx + 1.5, dy + 1.5, baseTileSize - 3, baseTileSize - 3);
+            // Tiny top-left B/C badge dot
+            const dotX = dx + 5;
+            const dotY = dy + 5;
+            mapCtx.beginPath();
+            mapCtx.arc(dotX, dotY, 3.2, 0, Math.PI * 2);
+            mapCtx.fillStyle = isBlessed ? '#10b981' : '#f43f5e';
+            mapCtx.fill();
+            mapCtx.strokeStyle = '#0a0d14';
+            mapCtx.lineWidth = 1;
+            mapCtx.stroke();
+            mapCtx.restore();
+          }
         }
         // 5. Door
         if (t.doorGlyph) {
@@ -2778,6 +3033,18 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (mapTooltip) {
         const isEn = !I18N.isZh();
+        const renderBucBadge = (sanctity) => {
+          if (sanctity === 'blessed') {
+            return `<span class="px-1 py-0.5 rounded text-[10px] font-bold bg-emerald-950/90 text-emerald-300 border border-emerald-700/80 shrink-0">${isEn ? 'Blessed' : '祝福'}</span>`;
+          }
+          if (sanctity === 'cursed') {
+            return `<span class="px-1 py-0.5 rounded text-[10px] font-bold bg-rose-950/90 text-rose-400 border border-rose-700/80 shrink-0">${isEn ? 'Cursed' : '诅咒'}</span>`;
+          }
+          if (sanctity === 'uncursed') {
+            return `<span class="px-1 py-0.5 rounded text-[10px] font-medium bg-surface-800/90 text-slate-400 border border-surface-700/70 shrink-0">${isEn ? 'Uncursed' : '未诅咒'}</span>`;
+          }
+          return '';
+        };
         let tipHtml = '';
         if (shopHit) {
           const badgeColor = shopHit.isShrineOrStation ? 'text-cyan-400' : 'text-amber-400';
@@ -2792,6 +3059,13 @@ document.addEventListener('DOMContentLoaded', () => {
           tipHtml += `<div class="mb-1 pb-1 border-b border-surface-700/80 font-bold ${badgeColor} flex items-center justify-between">
             <span>${shopHit.isShrineOrStation ? '✨' : '🏪'} ${shopTypeName}</span>
             ${keeperHtml}
+          </div>`;
+        }
+        if (hit && hit.fixture && hit.fixtureSanctity) {
+          const fixName = isEn ? hit.fixture : (hit.fixtureChinese || hit.fixture);
+          tipHtml += `<div class="mb-1 pb-1 border-b border-surface-700/60 flex items-center gap-1.5 text-xs font-semibold text-cyan-200">
+            ${renderBucBadge(hit.fixtureSanctity)}
+            <span>✨ ${fixName}</span>
           </div>`;
         }
         if (hit) {
@@ -2819,11 +3093,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     : it.state === 'container'
                     ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-400 border border-amber-800">${isEn ? `📦 Container (${containerText})` : `📦 容器 (${containerText})`}</span>`
                     : `<span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-surface-800 text-slate-300">${isEn ? 'Ground' : '地面'}</span>`;
+                  const bucBadge = renderBucBadge(it.sanctity);
                   const itName = isEn ? (it.name || it.nameChinese) : (it.nameChinese || it.name);
                   return `
                     <div class="flex items-center justify-between gap-2 text-xs py-0.5 border-b border-surface-800/40 last:border-none">
-                      <span class="${it.isArtifact ? 'text-amber-400 font-bold flex items-center gap-1' : 'text-slate-200'} truncate">
-                        ${it.isArtifact ? '✨ ' : ''}${itName}${it.count > 1 ? ` ×${it.count}` : ''}
+                      <span class="flex items-center gap-1.5 min-w-0">
+                        ${bucBadge}
+                        <span class="${it.isArtifact ? 'text-amber-400 font-bold' : 'text-slate-200'} truncate">
+                          ${it.isArtifact ? '✨ ' : ''}${itName}${it.count > 1 ? ` ×${it.count}` : ''}
+                        </span>
                       </span>
                       <span class="shrink-0">${stateBadge}</span>
                     </div>
@@ -2835,7 +3113,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         mapTooltip.innerHTML = tipHtml;
-        const tipWidth = (itemHit && itemHit.length > 0) ? 330 : 280;
+        const tipWidth = (itemHit && itemHit.length > 0) ? 370 : 280;
         const posX = (mouseX + 16 + tipWidth > rect.width) ? (mouseX - tipWidth - 10) : (mouseX + 16);
         const posY = Math.min(mouseY + 16, Math.max(10, rect.height - 45));
         mapTooltip.style.left = `${posX}px`;
@@ -3142,32 +3420,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!currentFloorData || !mapCanvasContainer) return;
 
-    // 6. Center canvas viewport on artifact coordinates
+    // 6. Center canvas viewport on target coordinates (or whole floor if coordinates are 0,0)
     resizeMapCanvas();
-    const localX = gx - currentFloorData.left;
-    const localY = gy - currentFloorData.top;
+    if (gx === 0 && gy === 0) {
+      resetMapViewport();
+    } else {
+      const localX = gx - currentFloorData.left;
+      const localY = gy - currentFloorData.top;
 
-    const rect = mapCanvasContainer.getBoundingClientRect();
-    mapScale = Math.max(mapScale, 1.5);
-    const targetPixelX = (localX + 0.5) * baseTileSize;
-    const targetPixelY = (localY + 0.5) * baseTileSize;
-    mapOffsetX = rect.width / 2 - targetPixelX * mapScale;
-    mapOffsetY = rect.height / 2 - targetPixelY * mapScale;
+      const rect = mapCanvasContainer.getBoundingClientRect();
+      mapScale = Math.max(mapScale, 1.5);
+      const targetPixelX = (localX + 0.5) * baseTileSize;
+      const targetPixelY = (localY + 0.5) * baseTileSize;
+      mapOffsetX = rect.width / 2 - targetPixelX * mapScale;
+      mapOffsetY = rect.height / 2 - targetPixelY * mapScale;
 
-    if (mapZoomLabel) mapZoomLabel.textContent = `${Math.round(mapScale * 100)}%`;
+      if (mapZoomLabel) mapZoomLabel.textContent = `${Math.round(mapScale * 100)}%`;
 
-    // 7. Focus tile, render, and show tooltip
-    const hit = currentTileMap.get(`${localX},${localY}`);
-    hoveredTile = hit || { x: localX, y: localY };
-    renderMapCanvas();
+      // 7. Focus tile, render, and show tooltip
+      const hit = currentTileMap.get(`${localX},${localY}`);
+      hoveredTile = hit || { x: localX, y: localY };
+      renderMapCanvas();
 
-    if (mapCoordsBadge) {
-      mapCoordsBadge.textContent = `${I18N.isZh() ? '指针' : 'Cursor'}: (${gx}, ${gy})`;
+      if (mapCoordsBadge) {
+        mapCoordsBadge.textContent = `${I18N.isZh() ? '指针' : 'Cursor'}: (${gx}, ${gy})`;
+      }
+
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      updateTileTooltip(localX, localY, centerX, centerY);
     }
-
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-    updateTileTooltip(localX, localY, centerX, centerY);
 
     // 8. Smooth scroll view to map viewer
     if (subtabs.map && subtabs.map.content) {

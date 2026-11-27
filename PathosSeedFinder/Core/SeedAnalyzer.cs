@@ -8,8 +8,6 @@ namespace PathosSeedFinder.Core
 {
     public class SeedAnalyzer
     {
-        private static readonly object simulationLock = new();
-
         internal static dynamic ParseSeed(string seedInput, PathosContext ctx)
         {
             seedInput = seedInput.Trim();
@@ -106,7 +104,7 @@ namespace PathosSeedFinder.Core
             }
             else
             {
-                lock (simulationLock)
+                lock (ctx.SimulationLock)
                 {
                     adventure = SimulateDungeon(ctx, seed, seedCode, report);
                 }
@@ -432,6 +430,7 @@ namespace PathosSeedFinder.Core
                                     Site = loc.Site,
                                     SiteChinese = loc.SiteChinese,
                                     SubArea = loc.SubArea,
+                                    MapRawName = mapRawName,
                                     LevelIndex = loc.LevelIndex,
                                     MerchantName = nearestMerchant,
                                     X = sx,

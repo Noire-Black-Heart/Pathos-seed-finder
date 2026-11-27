@@ -93,6 +93,7 @@ namespace PathosSeedFinder.Core
         public static bool IsInitialized => instance != null && instance.IsReady;
 
         public bool IsReady { get; private set; }
+        public object SimulationLock { get; } = new();
         public string InstallationPath { get; private set; } = "";
         public string GameVersion { get; private set; } = "";
         public TranslationManager Translations { get; } = new();

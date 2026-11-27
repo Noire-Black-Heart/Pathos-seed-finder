@@ -30,6 +30,9 @@ namespace PathosSeedFinder.Core
         private readonly Dictionary<string, string> deviceEnToCn = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, string> deviceCnToEn = new(StringComparer.OrdinalIgnoreCase);
 
+        private readonly Dictionary<string, string> featureEnToCn = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string> featureCnToEn = new(StringComparer.OrdinalIgnoreCase);
+
         public bool IsLoaded { get; private set; }
 
         public void Load(string dictPath)
@@ -84,6 +87,10 @@ namespace PathosSeedFinder.Core
                     case "DeviceName":
                         deviceEnToCn[en] = cn;
                         deviceCnToEn[cn] = en;
+                        break;
+                    case "FeatureName":
+                        featureEnToCn[en] = cn;
+                        featureCnToEn[cn] = en;
                         break;
                 }
             }
@@ -207,6 +214,14 @@ namespace PathosSeedFinder.Core
         {
             if (string.IsNullOrEmpty(en)) return "";
             return deviceEnToCn.TryGetValue(en, out var cn) ? cn : en;
+        }
+
+        public string TranslateFeature(string en)
+        {
+            if (string.IsNullOrEmpty(en)) return "";
+            if (featureEnToCn.TryGetValue(en, out var cn)) return cn;
+            if (blockEnToCn.TryGetValue(en, out cn)) return cn;
+            return en;
         }
 
         public string ResolveTrapEnglish(string name)
